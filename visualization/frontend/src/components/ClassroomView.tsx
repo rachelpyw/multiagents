@@ -175,11 +175,18 @@ function PixelCharacter({
   );
 }
 
-function TalkingBubble({kind}: {kind: string}) {
+function TalkingBubble({kind, preparing = false}: {kind: string; preparing?: boolean}) {
   const symbol = kind === "question" ? "?" : kind === "help_request" ? "!" : undefined;
-  return <g className="talking-bubble" transform="translate(52 -64)" role="img" aria-label={symbol === "?" ? "Asking a question" : symbol === "!" ? "Asking for help" : "Speaking"}>
+  return <g className={`talking-bubble ${preparing ? "preparing" : ""}`} transform="translate(52 -64)" role="img"
+    aria-label={kind === "writing" ? preparing ? "Preparing test" : "Writing test" : symbol === "?" ? "Asking a question" : symbol === "!" ? "Asking for help" : "Speaking"}>
     <path d="M-28-20H28Q34-20 34-14V14Q34 20 28 20H-13L-27 31V20H-28Q-34 20-34 14V-14Q-34-20-28-20Z" />
-    {symbol ? <text y="9" textAnchor="middle">{symbol}</text>
+    {kind === "writing" ? <g transform="translate(-12 -12) scale(1.2)">
+      <g className="bubble-pencil">
+        <path d="M4 13L13 4L17 8L8 17L3 18Z" fill="#bba44b" />
+        <path d="M13 4L15 2L19 6L17 8Z" fill="#bd846f" />
+        <path d="M3 18L4 13L8 17Z" fill="#35432c" />
+      </g>
+    </g> : symbol ? <text y="9" textAnchor="middle">{symbol}</text>
       : <g className="talking-dots"><circle cx="-15" r="4" /><circle r="4" /><circle cx="15" r="4" /></g>}
   </g>;
 }
@@ -227,11 +234,17 @@ export function ClassroomView({
   const pictures = activity.isTest || activity.testComplete || testFailed ? [] : lessonPictures(interactions, manifest, dialogue);
   const boardColumns = Math.min(3, Math.max(1, pictures.length));
   const boardRows = Math.ceil(pictures.length / boardColumns);
-  const eligibleAgents = new Set(activity.isTest ? [] :
-    activePhase.routes
-      .filter((route) => route.allowed && route.source_id === selectedStudent)
-      .map((route) => route.target_id),
-  );
+  const permitsPeer = (target: string) => activePhase.architecture !== "pipeline" && (activePhase.architecture === "blackboard"
+    ? [selectedStudent, target].every((id) => activePhase.blackboard?.writers.includes(id) && activePhase.blackboard?.readers.includes(id))
+    : activePhase.routes.some((route) =>
+    route.allowed && route.source_id === selectedStudent && route.target_id === target && route.channel === "class")
+    && activePhase.routes.some((route) =>
+      route.allowed && route.source_id === target && route.target_id === selectedStudent && route.channel === "class")
+    && (activePhase.architecture !== "supervisor" || activePhase.peer_communication));
+  const permittedPeers = manifest.roster.filter((student) => student.student_id !== selectedStudent && permitsPeer(student.student_id));
+  const steeringEnabled = manifest.mode === "live" && !activity.isTest && !activity.testComplete && !testFailed
+    && conversationReady && permittedPeers.length > 0;
+  const eligibleAgents = new Set(steeringEnabled ? permittedPeers.map((student) => student.student_id) : []);
   const resolveAgent = (agentId: string) =>
     manifest.roster.find((student) => student.student_id === agentId)?.display_name
     ?? (agentId === teacherId ? teacherId : agentId);
@@ -266,21 +279,15 @@ export function ClassroomView({
       const otherPosition = studentPositions[other.student_id];
       const overlap = ((position.x - otherPosition.x) / 96) ** 2
         + ((position.y - otherPosition.y) / 40) ** 2 <= 1;
-      if (overlap) {
+      if (overlap && (student.student_id === selectedStudent && eligibleAgents.has(other.student_id)
+        || other.student_id === selectedStudent && eligibleAgents.has(student.student_id))) {
         proximityActive.add(student.student_id);
         proximityActive.add(other.student_id);
       }
     });
   });
-  const permitsPeer = (target: string) => activePhase.architecture === "blackboard"
-    ? [selectedStudent, target].every((id) => activePhase.blackboard?.writers.includes(id) && activePhase.blackboard?.readers.includes(id))
-    : activePhase.routes.some((route) =>
-    route.allowed && route.source_id === selectedStudent && route.target_id === target && route.channel === "class")
-    && activePhase.routes.some((route) =>
-      route.allowed && route.source_id === target && route.target_id === selectedStudent && route.channel === "class")
-    && (activePhase.architecture !== "supervisor" || activePhase.peer_communication);
   const targetId = manifest.roster
-    .filter((student) => student.student_id !== selectedStudent && permitsPeer(student.student_id))
+    .filter((student) => eligibleAgents.has(student.student_id))
     .map((student) => {
       const source = studentPositions[selectedStudent];
       const target = studentPositions[student.student_id];
@@ -291,8 +298,7 @@ export function ClassroomView({
     })
     .filter((candidate) => candidate.distance <= 1)
     .sort((left, right) => left.distance - right.distance)[0]?.id;
-  const canTalk = manifest.mode === "live" && !activity.isTest && conversationReady
-    && steeringState !== "pending" && Boolean(targetId);
+  const canTalk = steeringEnabled && steeringState !== "pending" && Boolean(targetId);
   const taskLabels: Record<string, string> = {
     ask_question: "Teacher question", feedback: "Student report", lecture: "Teacher explanation",
     pipeline_handoff: "Passing evidence card", group_discussion: "Peer discussion",
@@ -302,7 +308,7 @@ export function ClassroomView({
     : taskLabels[dialogue?.payload.active_event ?? ""] ?? "Class discussion";
 
   useEffect(() => {
-    if (manifest.mode !== "live") return;
+    if (!steeringEnabled) return;
     const talk = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, button, [contenteditable='true']")) return;
@@ -312,7 +318,7 @@ export function ClassroomView({
     };
     window.addEventListener("keydown", talk);
     return () => window.removeEventListener("keydown", talk);
-  }, [manifest.mode, canTalk, targetId, onTalk]);
+  }, [steeringEnabled, canTalk, targetId, onTalk]);
   const moveSelected = (position: {x: number; y: number}) => {
     if (!selectedStudent || activity.isTest) return;
     window.clearTimeout(walkTimers.current[selectedStudent]);
@@ -327,7 +333,7 @@ export function ClassroomView({
       ),
     );
     if (blocked.has(destination)) {
-      setMovementNotice("That tile is occupied. Use Talk to, or choose a clear aisle tile.");
+      setMovementNotice("That tile is occupied. Choose a clear aisle tile.");
       return;
     }
     const path = tilePath(start, destination, blocked).slice(1);
@@ -538,7 +544,7 @@ export function ClassroomView({
           return (
             <g
               key={student.student_id}
-              className={`student-sprite-button action-${action} ${isSpeaker ? "speaking" : ""} ${eligibleAgents.has(student.student_id) ? "talk-eligible" : ""} ${proximityActive.has(student.student_id) ? "proximity-active" : ""} ${walkingStudents.has(student.student_id) ? "walking" : ""}`}
+              className={`student-sprite-button action-${action} ${activity.isTest && testStarting ? "preparing" : ""} ${isSpeaker ? "speaking" : ""} ${eligibleAgents.has(student.student_id) ? "talk-eligible" : ""} ${proximityActive.has(student.student_id) ? "proximity-active" : ""} ${walkingStudents.has(student.student_id) ? "walking" : ""}`}
               onClick={() => onStudent(student.student_id)}
               onKeyDown={(event) => event.key === "Enter" && onStudent(student.student_id)}
               tabIndex={0}
@@ -550,7 +556,8 @@ export function ClassroomView({
               data-talk-eligible={eligibleAgents.has(student.student_id) || undefined}
               style={{transform: `translate(${position.x}px, ${position.y}px)`}}
             >
-              <ellipse className="proximity-ring" cx="0" cy="31" rx="48" ry="20" style={{color: student.color}} />
+              {steeringEnabled && (student.student_id === selectedStudent || eligibleAgents.has(student.student_id)) &&
+                <ellipse className="proximity-ring" cx="0" cy="31" rx="48" ry="20" style={{color: student.color}} />}
               {selectedStudent === student.student_id && <path className="selection-diamond" d="M0 45L18 35L0 25L-18 35Z" />}
               {eligibleAgents.has(student.student_id) && <path className="route-eligible-marker" d="M31 37L38 44L31 51L24 44Z" />}
               <rect
@@ -575,7 +582,8 @@ export function ClassroomView({
                 <path d="M-10 0L12 -7L23 1L0 9Z" fill="#fffbed" stroke="#51483e" strokeWidth="2" />
                 <path className="test-pencil" d="M3 0L16 -9" stroke="#b57f36" strokeWidth="3" />
               </g>}
-              {isSpeaker && <TalkingBubble kind={dialogue?.payload.interaction_type ?? "other"} />}
+              {activity.isTest ? <TalkingBubble kind="writing" preparing={testStarting} />
+                : isSpeaker && <TalkingBubble kind={dialogue?.payload.interaction_type ?? "other"} />}
               {active && !activity.isTest && !isSpeaker && <g className="action-badge" transform="translate(31 -47)">
                 <rect x="-9" y="-10" width="20" height="20" fill={interactionStyles[active.payload.interaction_type as keyof typeof interactionStyles]?.stroke ?? "#fff"} stroke="#17243b" strokeWidth="3" />
                 <text x="1" y="5" textAnchor="middle">{badge}</text>
@@ -611,7 +619,7 @@ export function ClassroomView({
         </div>
         <header className="dialogue-speaker">
           <strong>{testFailed ? "Test failed" : activity.testComplete ? "Class complete" : activity.isTest ? "Independent assessment" : dialogue ? resolveAgent(dialogue.payload.speaker_id) : "Classroom"}</strong>
-          {steeringState && <span className="steering-status" role="status">
+          {permittedPeers.length > 0 && steeringState && <span className="steering-status" role="status">
             Steering…{steeringState === "complete" && <svg viewBox="0 0 16 16" role="img" aria-label="Complete">
               <path d="M3 8l3 3 7-7" />
             </svg>}
@@ -619,17 +627,6 @@ export function ClassroomView({
           {manifest.mode === "live" && !followingLive && <button onClick={onFollowLive}>Follow live</button>}
           {(conversationNotice || movementNotice) && <span className="steering-feedback" role="status">{conversationNotice || movementNotice}</span>}
         </header>
-        {activity.isTest && <div className={`test-writing ${testStarting ? "preparing" : ""}`} role="status"
-          aria-label={testStarting ? "Students preparing for the test" : "Students working on the test"}>
-          {manifest.roster.map((student) => <span key={student.student_id} className="writing-student">
-            <svg className="writing-pencil" viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M4 13L13 4L17 8L8 17L3 18Z" fill="#dfcf82" />
-              <path d="M13 4L15 2L19 6L17 8Z" fill="#bd846f" />
-              <path d="M3 18L4 13L8 17Z" fill="#edf0e3" />
-              <path d="M1 19H12" stroke="currentColor" />
-            </svg>{student.display_name}
-          </span>)}
-        </div>}
         <p>{testFailed ? "Test stopped. Completed answers are in the sidebar."
           : activity.testComplete ? "Results saved. Ready for the next class." : activity.isTest ? testStarting ? "Students are taking their seats."
           : `${testCompleted}/${manifest.roster.length} student results received.`

@@ -124,6 +124,11 @@ class ArchitecturePolicy:
             configuration.phases[0],
         )
 
+    def allows_peer_exchange(self, source_id: str, target_id: str) -> bool:
+        channel = "blackboard:write" if self.phase.architecture == "blackboard" else "class"
+        return all(self(source_id=source, target_id=target, channel=channel, message=None)
+                   for source, target in ((source_id, target_id), (target_id, source_id)))
+
     def __call__(
         self,
         *,

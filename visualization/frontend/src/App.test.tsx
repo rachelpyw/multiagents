@@ -179,9 +179,10 @@ it("keeps all six students writing in the classroom and streams results into the
   await waitFor(() => expect(post).toHaveBeenCalledWith("/api/runs/lesson/tests"));
   await waitFor(() => expect(document.querySelectorAll("[data-desk-id]")).toHaveLength(6));
   expect(new Set([...document.querySelectorAll("[data-desk-id]")].map((element) => (element as SVGElement).style.transform)).size).toBe(6);
-  await screen.findByRole("status", {name: "Students working on the test"});
+  await waitFor(() => expect(screen.getAllByRole("img", {name: "Writing test"})).toHaveLength(6));
   expect(document.querySelectorAll(".test-pencil")).toHaveLength(6);
-  expect(document.querySelectorAll(".game-dialogue .writing-pencil")).toHaveLength(6);
+  expect(document.querySelectorAll(".student-sprite-button .talking-bubble .bubble-pencil")).toHaveLength(6);
+  expect(document.querySelector(".game-dialogue svg")).toBeNull();
   expect(screen.getByText("0/6 student results received.")).toBeTruthy();
   expect(screen.queryByRole("region", {name: "Independent bird test"})).toBeNull();
   expect(screen.queryByRole("button", {name: "View test"})).toBeNull();
@@ -191,7 +192,7 @@ it("keeps all six students writing in the classroom and streams results into the
   expect(screen.getByRole("complementary", {name: "Class and student insights"}).textContent).toContain("Test results");
   completed = true;
   await screen.findByText("Results saved. Ready for the next class.", {}, {timeout: 2500});
-  expect(document.querySelectorAll(".test-pencil, .writing-pencil, [data-desk-id]")).toHaveLength(0);
+  expect(document.querySelectorAll(".test-pencil, .bubble-pencil, [data-desk-id]")).toHaveLength(0);
   expect(screen.getAllByRole("button", {name: /^Select [A-F]$/})).toHaveLength(6);
   expect(screen.getByRole("complementary", {name: "Class and student insights"}).textContent).toContain("6/6 students identified");
 });

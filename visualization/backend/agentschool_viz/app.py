@@ -8,7 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .service import RunNotFoundError, RunService
-from .architecture import ExperimentConfiguration, configuration_schema
+from .architecture import ArchitecturePolicy, ExperimentConfiguration, configuration_schema
+from .schemas import RunManifest
 from .conversations import ConversationQueue, ConversationRequest, ConversationUnavailable
 from .mode_runs import StartModeRequest, create_mode_run
 from .classroom_tests import bird_lesson, create_test_run
@@ -75,11 +76,26 @@ def conversation_queue(run_id: str, *, require_live: bool = True) -> Conversatio
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
 
+def conversation_policy(manifest: RunManifest) -> ArchitecturePolicy | None:
+    configuration = manifest.run_configuration.get("experiment")
+    if configuration is None or manifest.run_configuration.get("runner") == "assessment":
+        return None
+    try:
+        return ArchitecturePolicy(ExperimentConfiguration.model_validate(configuration))
+    except (ValueError, IndexError) as error:
+        raise HTTPException(status_code=409, detail="This run has no valid active communication policy.") from error
+
+
 @app.get("/api/runs/{run_id}/conversations")
 def conversation_capability(run_id: str):
     queue = conversation_queue(run_id, require_live=False)
     manifest = service.manifest(run_id)
-    return {"available": manifest.mode == "live" and queue.available(), "mode": manifest.mode,
+    policy = conversation_policy(manifest)
+    peers_allowed = policy is not None and any(
+        policy.allows_peer_exchange(source.student_id, target.student_id)
+        for source in manifest.roster for target in manifest.roster if source != target
+    )
+    return {"available": manifest.mode == "live" and peers_allowed and queue.available(), "mode": manifest.mode,
             "error": manifest.run_configuration.get("error"), "status": manifest.run_configuration.get("status")}
 
 
@@ -100,9 +116,13 @@ def start_mode_run(run_id: str, request: StartModeRequest):
 @app.post("/api/runs/{run_id}/conversations", status_code=202)
 def request_conversation(run_id: str, request: ConversationRequest):
     queue = conversation_queue(run_id)
-    roster = {student.student_id for student in service.manifest(run_id).roster}
+    manifest = service.manifest(run_id)
+    roster = {student.student_id for student in manifest.roster}
     if request.source_id not in roster or request.target_id not in roster or request.source_id == request.target_id:
         raise HTTPException(status_code=422, detail="Choose two different students from this run.")
+    policy = conversation_policy(manifest)
+    if policy is None or not policy.allows_peer_exchange(request.source_id, request.target_id):
+        raise HTTPException(status_code=409, detail="Peer steering is not allowed for these students in this mode or test phase.")
     try:
         return queue.enqueue(request)
     except ConversationUnavailable as exc:

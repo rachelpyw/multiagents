@@ -68,7 +68,7 @@ describe("classroom live dialogue", () => {
     expect(document.querySelectorAll(".lesson-board image")).toHaveLength(2);
     rerender(<ClassroomView {...props} manifest={lesson} interactions={[teacher, attribute, comparison]} activity={{...props.activity, isTest: true}} />);
     expect(document.querySelector(".lesson-board")).toBeNull();
-    expect(document.querySelector(".talking-bubble")).toBeNull();
+    expect(screen.getAllByRole("img", {name: "Writing test"})).toHaveLength(2);
     const recorded = {...teacher, payload: {...teacher.payload,
       lesson_image_url: "/recorded.svg", lesson_image_alt: "Recorded lesson picture"}};
     rerender(<ClassroomView {...props} manifest={lesson} interactions={[recorded, comparison]} selectedEvent="teacher" />);
@@ -163,15 +163,27 @@ describe("classroom live dialogue", () => {
     expect(screen.getByText("[space] to talk")).toBeTruthy();
     for (const blocked of [
       {activePhase: createPreset(manifest, "supervisor").phases[0]},
+      {activePhase: createPreset(manifest, "pipeline").phases[0]},
       {conversationReady: false},
       {manifest: {...manifest, mode: "recorded" as const}},
       {activity: {...props.activity, isTest: true}},
     ]) {
       rerender(<ClassroomView {...props} {...blocked} />);
       expect(screen.queryByText("[space] to talk")).toBeNull();
+      expect(document.querySelector(".proximity-ring, .talk-eligible, .route-eligible-marker")).toBeNull();
       fireEvent.keyDown(document.body, {code: "Space"});
     }
     expect(props.onTalk).not.toHaveBeenCalled();
     expect(document.querySelector(".room-legend")).toBeNull();
+  });
+
+  it("explains an occupied tile without advertising a forbidden talk control", () => {
+    render(<ClassroomView {...props} activePhase={createPreset(manifest, "pipeline").phases[0]} />);
+    fireEvent.click(document.querySelector('[data-floor-x="500"][data-floor-y="556"]')!);
+    expect(screen.getByText("That tile is occupied. Choose a clear aisle tile.")).toBeTruthy();
+    expect(screen.queryByText(/Use Talk to/)).toBeNull();
+    expect(document.querySelector(".proximity-ring, .talk-eligible, .route-eligible-marker")).toBeNull();
+    fireEvent.keyDown(document.body, {code: "Space"});
+    expect(props.onTalk).not.toHaveBeenCalled();
   });
 });

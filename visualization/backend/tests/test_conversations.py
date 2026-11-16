@@ -165,7 +165,16 @@ def test_queue_bounds_and_close_are_persistent(tmp_path):
 def test_api_keeps_replays_immutable_and_accepts_only_live_roster(tmp_path, monkeypatch):
     service = RunService(tmp_path)
     original = service.manifest("synthetic-tutorial")
-    live = original.model_copy(update={"run_id": "live-test", "mode": "live"})
+    known = [str(original.teacher["name"]), *(student.student_id for student in original.roster)]
+    experiment = {
+        "config_id": "peers", "label": "Peers", "lesson_content": "Birds",
+        "agents": [{"agent_id": name, "display_name": name, "role": "agent"} for name in known],
+        "phases": [{"phase_id": "board", "label": "Board", "architecture": "blackboard",
+                    "blackboard": {"readers": known, "writers": known}}],
+        "assessment": {"blueprint_id": "birds"},
+    }
+    live = original.model_copy(update={"run_id": "live-test", "mode": "live",
+                                       "run_configuration": {"experiment": experiment}})
     folder = tmp_path / "live-test" / "visualization"
     folder.mkdir(parents=True)
     (folder / "manifest.json").write_text(live.model_dump_json())
@@ -182,3 +191,38 @@ def test_api_keeps_replays_immutable_and_accepts_only_live_roster(tmp_path, monk
     receipt = client.get(f"/api/runs/live-test/conversations/{response.json()['request_id']}").json()
     assert receipt["status"] == "queued"
     assert service.events("synthetic-tutorial")  # The fixture remains readable and unchanged.
+
+
+@pytest.mark.parametrize(("architecture", "restricted"), [
+    ("supervisor", False), ("pipeline", False), ("decentralized", False),
+    ("blackboard", False), ("decentralized", True), ("blackboard", True),
+])
+def test_api_advertises_and_queues_only_policy_permitted_peer_exchanges(tmp_path, monkeypatch, architecture, restricted):
+    from test_mode_runs import classroom, request
+
+    service, _ = classroom(tmp_path)
+    configuration = request(architecture).configuration
+    phase = configuration.phases[0]
+    if restricted:
+        if architecture == "decentralized":
+            phase.routes.pop()
+        else:
+            phase.blackboard.writers.remove("B")
+    live = service.manifest("source").model_copy(update={
+        "run_id": "live-policy", "mode": "live",
+        "run_configuration": {"runner": "native", "experiment": configuration.model_dump()},
+    })
+    folder = service.runs_root / live.run_id / "visualization"
+    folder.mkdir(parents=True)
+    (folder / "manifest.json").write_text(live.model_dump_json())
+    queue = ConversationQueue(folder / "conversations.sqlite")
+    queue.initialize()
+    queue.set_ready(True)
+    monkeypatch.setattr(api, "service", service)
+    client = TestClient(api.app)
+    enabled = architecture in {"decentralized", "blackboard"} and not restricted
+    assert client.get("/api/runs/live-policy/conversations").json()["available"] is enabled
+    response = client.post("/api/runs/live-policy/conversations", json={"source_id": "A", "target_id": "B"})
+    assert response.status_code == (202 if enabled else 409)
+    if not enabled:
+        assert queue.claim() is None
