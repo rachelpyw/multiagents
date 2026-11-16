@@ -126,6 +126,11 @@ def set_system_content(student):
     涉及到json格式的输出的时候，请只输出 JSON 数据，不要包含任何解释性文字、markdown 代码块符号（如 ```json）或额外内容。
     """
 
+    if getattr(student, "public_language", None):
+        system_prompt += (
+            f"\nUse {student.public_language} for public speech, discussion, answers, and teaching feedback. "
+            "Preserve explicitly required JSON keys, ontology IDs, and structured classification labels."
+        )
     return system_prompt
 
 
@@ -525,6 +530,11 @@ async def run_ds_prompt_importance_chat(Student, chat_content):
 #     # 在线程池中执行计算密集型操作
 #     return await asyncio.to_thread(_compute_embedding)
 
+@lru_cache(maxsize=2)
+def embedding_model(model_name):
+    return SentenceTransformer(model_name)
+
+
 async def get_local_embedding(information, model_name="BAAI/bge-small-zh-v1.5"):
     """异步计算嵌入向量，支持缓存以提升性能。
     第一次调用时计算并缓存，后续直接返回。
@@ -541,7 +551,7 @@ async def get_local_embedding(information, model_name="BAAI/bge-small-zh-v1.5"):
             # 环境变量优先
             env_model = os.getenv("BGE_MODEL")
             load_target = env_model if env_model else model_name
-            model = SentenceTransformer(load_target)
+            model = embedding_model(load_target)
             embedding = model.encode(information, convert_to_tensor=True)
             return embedding.tolist()
         
@@ -1756,6 +1766,11 @@ async def run_ds_prompt_summarize_status(student):
     """
 
     personality_str, cognitive_state_str, affective_state_str, learning_style_str = translate_student_to_str(student.scratch)
+    statuses = (
+        '"Not listening", "Distracted", "Listening", "Fully focused"'
+        if os.getenv("AGENTSCHOOL_OUTPUT_LANGUAGE") == "en"
+        else "“完全没在听讲”，“不太专心”，“认真听讲”，“全神贯注”"
+    )
 
     prompt = f"""
     你现在是一名认知建模专家，
@@ -1763,7 +1778,7 @@ async def run_ds_prompt_summarize_status(student):
     注意力水平（Attention Level）：{student.scratch.attention_level}
     压力强度（Stress Level）：{student.scratch.stress}
 
-    根据这些特质判断这个学生当前的状况，在“完全没在听讲”，“不太专心”，“认真听讲”，“全神贯注”中选择一个最符合此学生当前状态的输出。
+    根据这些特质判断这个学生当前的状况，在{statuses}中选择一个最符合此学生当前状态的输出。
     并且最终仅输出其中一个状态，不要有其他内容。
     """
     messages = [

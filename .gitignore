@@ -60,6 +60,11 @@ venv/
 dist/
 build/
 *.egg-info/
+visualization/frontend/node_modules/
+visualization/frontend/dist/
+*.tsbuildinfo
+visualization/frontend/vite.config.js
+visualization/frontend/vite.config.d.ts
 
 # Generated evaluation artifacts at repo root
 *_exercise_results_*.json

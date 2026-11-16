@@ -148,7 +148,7 @@ class Teacher:
         self.period = "not_started" # 当前教学阶段，分为“not_started”（未开始）、“decide_ended”(一次决策结束)、“subsection_activity”、“subsection_lecture”、“already_ended”（课程结束）
         self.class_turns = 40  #每节课40轮
         self.current_turn = 0
-        self.content = "还没开始上课" #当前教学内容
+        self.content = self.public_text("Class has not started.", "还没开始上课") #当前教学内容
 
         # 广播机制
         if broadcast_sys is None:
@@ -552,7 +552,7 @@ class Teacher:
         self.text_this_class = ""
         self.current_turn = 0 
         self.type = ""  #重置type
-        self.content = "还没开始上课"  #重置content
+        self.content = self.public_text("Class has not started.", "还没开始上课")  #重置content
         #保存向量数据库
         self.ep_vector_db.save(path=os.path.join(self.ep_vector_db_file, f"{self.ep_level}"))
         self.pck_vector_db.save(path=os.path.join(self.pck_vector_db_file, f"{self.subject}", f"{self.pck_level}"))
@@ -679,7 +679,10 @@ class Teacher:
             t = json.load(subsections_file)["subsections"]
         for item in t:
             self.subsections.append(item['content'])
-            self.importance.append(item['score'])
+            score = int(item['score'])
+            if not 0 <= score <= 10:
+                raise ValueError("Textbook importance must be an integer from 0 to 10.")
+            self.importance.append(score)
             self.focus.append(item['focus'])
         self.type = "start_class" 
         # 广播
@@ -688,11 +691,11 @@ class Teacher:
             message_type=MessageType.COMMAND,
             active_event=self.type,
             speaker=self.name,
-            content=f"开始上课，教学目标是：{self.target}"
+            content=self.public_text(f"Class begins. Today's goal: {self.target}", f"开始上课，教学目标是：{self.target}")
         )
         self.broadcast_sys.publish_sync("student", msg)
         #更新状态
-        self.content = "现在开始上课。"
+        self.content = self.public_text("Class begins.", "现在开始上课。")
         self.period = "decide_ended"  # 开启第一次决策
 
     
@@ -914,6 +917,8 @@ class Teacher:
             self.type = "ask_question"
         elif type == "对接收到的回答进行评价":
             self.type = "feedback"
+        else:
+            raise ValueError("Invalid native teaching-method code; refusing to publish a lesson with a stale event type.")
         # 生成教学内容
         pre_text = ""  
         prompt = f"""
@@ -1030,7 +1035,7 @@ class Teacher:
             self.duration_turn += 1  # 更新小组讨论轮数
         elif self.duration_turn == self.duration:
             #小组讨论结束
-            self.content = "小组讨论结束。"
+            self.content = self.public_text("Group discussion has ended.", "小组讨论结束。")
             msg = BroadcastMessage(
                 current_time=self.time,
                 message_type=MessageType.COMMAND,
@@ -1072,19 +1077,19 @@ class Teacher:
             )
             self.broadcast_sys.publish_sync("student", msg)
             #更新状态
-            self.content = f"进行小组讨论反馈，反馈内容：{feedback}。"
+            self.content = self.public_text(f"Discussion feedback: {feedback}", f"进行小组讨论反馈，反馈内容：{feedback}。")
             self.taught += f"{self.content}\n"
             self.period = "decide_ended"  # 小节结束
         else:
             #小组讨论进行中
-            self.content = f"小组讨论进行中，教师正在等待。"
+            self.content = self.public_text("Students are discussing; the teacher is listening.", "小组讨论进行中，教师正在等待。")
             #更新状态
             self.taught += f"{self.content}\n"
             self.duration_turn += 1  # 更新小组讨论轮数
 
     def waiting(self):
         """"""
-        self.content = "教学提前完成，教师正在等待下课。"
+        self.content = self.public_text("Teaching is complete; waiting for the end of class.", "教学提前完成，教师正在等待下课。")
         self.type = "waiting"
 
     def delay_turns(self):
@@ -1121,7 +1126,7 @@ class Teacher:
             message_type=MessageType.COMMAND,
             active_event="finish_class",
             speaker=self.name,
-            content=f"本节课结束。"
+            content=self.public_text("Class has ended.", "本节课结束。")
         )
         self.broadcast_sys.publish_sync("student", msg_command)
         msg_taught = BroadcastMessage(
@@ -1129,7 +1134,7 @@ class Teacher:
             message_type=MessageType.CLASS,
             active_event="taught",
             speaker=self.name,
-            content=f"本节课教学内容为：{self.taught}"
+            content=self.public_text(f"Today's lesson: {self.taught}", f"本节课教学内容为：{self.taught}")
         )
         log_file = os.path.join(script_dir, "teacher_log.txt")
         with open(log_file, 'w', encoding='utf-8') as f:
@@ -1166,10 +1171,14 @@ class Teacher:
         self.type = "finish_class"  #在update_experience后重置
         self.class_turns = 40 
         #current_turn在update_experience中更新
-        self.content = "本节课结束。"#在update_experience中重置
+        self.content = self.public_text("Class has ended.", "本节课结束。")#在update_experience中重置
         #时间不重置
         self.period = "update_experience" #进入更新经验阶段
 
+
+    @staticmethod
+    def public_text(english, original):
+        return english if os.getenv("AGENTSCHOOL_OUTPUT_LANGUAGE") == "en" else original
 
     def move(self):
         '''
@@ -1177,13 +1186,13 @@ class Teacher:
         '''
         if self.period == "update_experience":
             self.update_experience()
-            return f"{self.name} 总结经验完成。"
+            return self.public_text(f"{self.name} updated teaching experience.", f"{self.name} 总结经验完成。")
         if self.period == "not_started":
             self.update_status()  # 初始状态
             self.start_class()
             self.current_turn += 1
             self.time += timedelta(minutes=1)
-            return  f"{self.name} 开始上课, 具体生成内容: {self.content}"
+            return self.public_text(f"{self.name} started class: {self.content}", f"{self.name} 开始上课, 具体生成内容: {self.content}")
         self.update_status()  # 更新部分状态并保存本轮状态
         if self.period == "decide_ended":
             self.decide()
@@ -1200,7 +1209,7 @@ class Teacher:
         self.time += timedelta(minutes=1)
         return_msg = f"第{self.current_turn}轮: {self.name} 进行{self.type}, 具体生成内容: {self.content}"
 
-        return return_msg
+        return self.public_text(f"Round {self.current_turn}: {self.name}, {self.type}: {self.content}", return_msg)
 
 
 if __name__ == "__main__":

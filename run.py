@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import os
 import sys
 import json
@@ -15,6 +16,12 @@ from teacher.teacher import Teacher
 from util.BroadcastMessage import *
 from student.exercise import *
 from student.evaluate import *
+from visualization.backend.agentschool_viz.instrumentation import RunCapture
+from visualization.backend.agentschool_viz.architecture import (
+    load_experiment_policy,
+    register_architecture_subscriptions,
+)
+from visualization.backend.agentschool_viz.conversations import ConversationQueue, process_conversation
 
 
 # 日志重定向类
@@ -337,6 +344,7 @@ async def handle_observer_intervention(pause_flag, teacher, students, time_manag
                     "turn": teacher.current_turn,
                     "content": getattr(teacher, "content", "")
                 }
+                visualization_capture.record_teacher(teacher, current_time, teacher_action)
                 print(f"✅ 已回溯到状态文件: {status_file}")
                 print(f"⚠️ 提示: 回溯仅恢复教师状态，学生状态未回滚")
                 # 回溯后自动重生成剩余计划（不改变已执行部分）
@@ -369,6 +377,12 @@ async def main():
     broadcast_recorder = Recorder("")
     student_recorder = Recorder("")
     broadcast_system = BroadcastSys(broadcast_recorder)
+    experiment_config_path = os.getenv("AGENTSCHOOL_EXPERIMENT_CONFIG", "config/experiment.json")
+    experiment_policy = None
+    if os.path.exists(experiment_config_path):
+        experiment_policy = load_experiment_policy(experiment_config_path)
+        broadcast_system.set_delivery_policy(experiment_policy)
+        print(f"Architecture delivery policy loaded from {experiment_config_path}")
 
     # 时间管理器
     time_manager = TimeManager(
@@ -385,6 +399,14 @@ async def main():
     # 初始化学生和教师
     students = initialize_students_from_config("config/student", broadcast_system, student_recorder)
     teacher = await Teacher.initialize_teacher_async(broadcast_system, "config/teacher.json", list(students.values()))
+    visualization_capture = RunCapture(base_log_dir)
+    conversation_queue = None
+    if os.getenv("AGENTSCHOOL_INTERACTIVE") == "1":
+        conversation_queue = ConversationQueue(visualization_capture.output_dir / "conversations.sqlite")
+        conversation_queue.initialize()
+        atexit.register(conversation_queue.close)
+    broadcast_system.add_event_listener(visualization_capture.record_broadcast)
+    visualization_capture.record_students(students, time_manager.current_time)
 
     # 订阅广播系统
     broadcast_system.subscribe(teacher, "teacher")
@@ -392,6 +414,12 @@ async def main():
         student = students[student_name]
         broadcast_system.subscribe(student, "student")
         broadcast_system.subscribe(student, student_name)
+    if experiment_policy:
+        register_architecture_subscriptions(
+            broadcast_system,
+            experiment_policy,
+            {str(teacher.name): teacher, **students},
+        )
 
     # ========== 启动观察者功能 ==========
     pause_flag = {
@@ -469,11 +497,21 @@ async def main():
                 break
 
             current_event = time_manager.get_current_active_event()
+            if conversation_queue:
+                conversation_queue.set_ready(False)
+                if current_event.type != "class":
+                    await process_conversation(
+                        conversation_queue, students, teacher, broadcast_system, current_time,
+                        assistance_allowed=False,
+                    )
 
             # 小组讨论处理
             if current_event.type == "class":
                 # 教师行为
                 teacher_action = teacher.move()
+                assistance_allowed = teacher.type in {"lecture", "ask_question", "feedback", "group_discussion"}
+                if conversation_queue:
+                    conversation_queue.set_ready(assistance_allowed)
                 print(teacher_action)
                 await action_recorder.log(current_time, "teacher_action",
                                   {"teacher": teacher.name, "action": teacher_action})
@@ -523,6 +561,7 @@ async def main():
                         print(action)
                         await action_recorder.log(current_time, "student_action",
                                                   {"student": student.name, "action": action})
+                        visualization_capture.record_student_action(student.name, current_time, action)
                     # 更新学生快照
                     runtime_snapshot["students"][student.name] = {
                         "action": action or "",
@@ -532,6 +571,12 @@ async def main():
                             else getattr(student.scratch, "attention", 0.0)
                         )
                     }
+                if conversation_queue:
+                    await process_conversation(
+                        conversation_queue, students, teacher, broadcast_system, current_time,
+                        assistance_allowed=assistance_allowed,
+                    )
+                visualization_capture.record_students(students, current_time)
 
             # 课程结束处理
             if current_event.end == current_time:
@@ -666,6 +711,10 @@ async def main():
             pass
     
     sim_wall_cost = time.time() - sim_wall_start
+    visualization_capture.finish()
+    if conversation_queue:
+        conversation_queue.close()
+        atexit.unregister(conversation_queue.close)
     print(f"[TIME] 仿真总耗时: {sim_wall_cost:.2f}s")
     print(f"\n{'='*70}")
     print(f"✅ 仿真已正常结束")

@@ -21,6 +21,8 @@ class BroadcastMessage:
     event_id: Optional[int] = None
     speaker: str = ""
     content: str = ""
+    observer_request_id: Optional[str] = None
+    steering_context_ids: Optional[list[str]] = None
 
 
     def to_dict(self) -> Dict:

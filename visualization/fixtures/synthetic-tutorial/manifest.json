@@ -1,0 +1,168 @@
+{
+  "schema_version": "1.0",
+  "run_id": "synthetic-tutorial",
+  "mode": "synthetic",
+  "label": "Synthetic bird identification lab",
+  "created_at": "2025-09-01T08:00:00",
+  "upstream_commit": "97040be2a8a56486c8e7585a47f646ef6eb1f472",
+  "roster": [
+    {
+      "student_id": "StudentA",
+      "display_name": "Avery",
+      "color": "#3f85bd",
+      "initials": "AV",
+      "attributes": {
+        "age": 12,
+        "gender": "Female",
+        "grade": "Grade 7",
+        "MBTI": "ESTJ",
+        "attention_level": 0.34,
+        "stress": 0.35,
+        "group": 0,
+        "retention": 10,
+        "personality": {"Extraversion": 25, "Conscientiousness": 22, "Agreeableness": 17, "Emotional Stability": 19, "Openness to Experience": 21},
+        "cognitive_state": ["Often identifies an animal from one striking feature", "Benefits from comparing similar species side by side"],
+        "affective_state": ["Curious about wildlife", "Can become frustrated when two species look similar"],
+        "learning_style": {"Perception": ["sensory", "prefers photographs"], "Processing": ["reflective", "checks a field guide"], "Understanding": ["sequential", "uses a checklist"]},
+        "common_mistakes": ["Uses color alone instead of shape and habitat", "Confuses breed, species, and sex"],
+        "participation": "Reflective"
+      }
+    },
+    {
+      "student_id": "StudentB",
+      "display_name": "Blake",
+      "color": "#d1843f",
+      "initials": "BL",
+      "attributes": {
+        "age": 13,
+        "gender": "Male",
+        "grade": "Grade 7",
+        "MBTI": "ENTP",
+        "attention_level": 0.78,
+        "stress": 0.18,
+        "group": 0,
+        "retention": 12,
+        "personality": {"Extraversion": 31, "Conscientiousness": 18, "Agreeableness": 24, "Emotional Stability": 29, "Openness to Experience": 34},
+        "cognitive_state": ["Recognizes common waterfowl", "Explains observations aloud"],
+        "affective_state": ["Confident contributor", "Enjoys visual puzzles"],
+        "learning_style": {"Perception": ["visual", "notices markings"], "Processing": ["active", "talks through choices"], "Understanding": ["global", "starts with habitat"]},
+        "common_mistakes": ["Answers before checking bill color"],
+        "participation": "Frequent"
+      }
+    },
+    {
+      "student_id": "StudentC",
+      "display_name": "Casey",
+      "color": "#7b68b2",
+      "initials": "CA",
+      "attributes": {
+        "age": 12,
+        "gender": "Nonbinary",
+        "grade": "Grade 7",
+        "MBTI": "INFP",
+        "attention_level": 0.62,
+        "stress": 0.48,
+        "group": 1,
+        "retention": 9,
+        "personality": {"Extraversion": 12, "Conscientiousness": 27, "Agreeableness": 30, "Emotional Stability": 16, "Openness to Experience": 33},
+        "cognitive_state": ["Strong at describing plumage", "Unsure about taxonomy vocabulary"],
+        "affective_state": ["Quiet in whole-class discussion", "Comfortable writing observations"],
+        "learning_style": {"Perception": ["visual", "detail oriented"], "Processing": ["reflective", "writes first"], "Understanding": ["sequential", "compares one feature at a time"]},
+        "common_mistakes": ["Calls male and female plumages different species"],
+        "participation": "Quiet"
+      }
+    },
+    {
+      "student_id": "StudentD",
+      "display_name": "Devon",
+      "color": "#4f9a78",
+      "initials": "DE",
+      "attributes": {
+        "age": 13,
+        "gender": "Male",
+        "grade": "Grade 7",
+        "MBTI": "ESFJ",
+        "attention_level": 0.7,
+        "stress": 0.22,
+        "group": 1,
+        "retention": 11,
+        "personality": {"Extraversion": 28, "Conscientiousness": 26, "Agreeableness": 32, "Emotional Stability": 27, "Openness to Experience": 23},
+        "cognitive_state": ["Connects feet and bill shapes to feeding behavior"],
+        "affective_state": ["Enjoys collaborative classification"],
+        "learning_style": {"Perception": ["practical", "uses behavior clues"], "Processing": ["active", "group discussion"], "Understanding": ["global", "uses ecological role"]},
+        "common_mistakes": ["Overweights habitat when species ranges overlap"],
+        "participation": "Collaborative"
+      }
+    },
+    {
+      "student_id": "StudentE",
+      "display_name": "Emery",
+      "color": "#c85f78",
+      "initials": "EM",
+      "attributes": {
+        "age": 12,
+        "gender": "Female",
+        "grade": "Grade 7",
+        "MBTI": "ENFP",
+        "attention_level": 0.55,
+        "stress": 0.31,
+        "group": 2,
+        "retention": 8,
+        "personality": {"Extraversion": 34, "Conscientiousness": 16, "Agreeableness": 29, "Emotional Stability": 21, "Openness to Experience": 35},
+        "cognitive_state": ["Generates several possible species quickly"],
+        "affective_state": ["Highly enthusiastic about birds"],
+        "learning_style": {"Perception": ["visual", "likes colorful examples"], "Processing": ["active", "brainstorms"], "Understanding": ["global", "groups by bird family"]},
+        "common_mistakes": ["Does not always eliminate alternatives"],
+        "participation": "Frequent"
+      }
+    },
+    {
+      "student_id": "StudentF",
+      "display_name": "Finley",
+      "color": "#6c8198",
+      "initials": "FI",
+      "attributes": {
+        "age": 13,
+        "gender": "Male",
+        "grade": "Grade 7",
+        "MBTI": "ISTJ",
+        "attention_level": 0.83,
+        "stress": 0.26,
+        "group": 2,
+        "retention": 14,
+        "personality": {"Extraversion": 11, "Conscientiousness": 35, "Agreeableness": 23, "Emotional Stability": 30, "Openness to Experience": 20},
+        "cognitive_state": ["Uses a consistent field-mark checklist"],
+        "affective_state": ["Patient with uncertain identifications"],
+        "learning_style": {"Perception": ["concrete", "uses measurements"], "Processing": ["reflective", "verifies quietly"], "Understanding": ["sequential", "family before species"]},
+        "common_mistakes": ["Can overlook behavior when plumage is clear"],
+        "participation": "Reflective"
+      }
+    }
+  ],
+  "teacher": {
+    "name": "Dr. Rowan",
+    "subject": "biology and ornithology",
+    "experience_level": "advanced",
+    "pck_level": "configured upstream",
+    "teaching_strategy_template": "high_level",
+    "teaching_strategy": "Prompt comparison of multiple visible field marks before confirming a species."
+  },
+  "concept_mapping": {
+    "bird-field-marks": "Bird field-mark identification",
+    "waterfowl-comparison": "Comparing similar waterfowl",
+    "taxonomy-language": "Species, sex, and breed terminology"
+  },
+  "model_identifiers": {"student_model": "synthetic-fixture", "teacher_model": "synthetic-fixture"},
+  "assessment_definitions": [{
+    "assessment_id": "bird-identification-v1",
+    "items": 4,
+    "mode": "independent",
+    "item_definitions": [
+      {"item_id": "q1", "label": "Mallard", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Mallard", "image_url": "/lesson-images/mallard-pixel.svg", "image_alt": "Original pixel illustration of a male mallard, with a green head, yellow bill, and white neck ring."},
+      {"item_id": "q2", "label": "Green-winged teal", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Green-winged teal", "image_url": "/lesson-images/teal-pixel.svg", "image_alt": "Original pixel illustration of a male green-winged teal, with a chestnut head and green eye patch."},
+      {"item_id": "q3", "label": "Bill-color recall", "task_type": "recall", "prompt": "Without hints, what color was the mallard bill in the teacher's explanation?", "expected_response": "Yellow", "image_url": "/lesson-images/mallard-pixel.svg", "image_alt": "Observer reference only: a male mallard. This picture is not a hint supplied to the recall answer provider."},
+      {"item_id": "q4", "label": "Rock pigeon", "task_type": "classification", "prompt": "Identify this pictured bird species. This is a transfer item, not explicitly taught in this lesson.", "expected_response": "Rock pigeon", "image_url": "/lesson-images/pigeon-pixel.svg", "image_alt": "Original pixel illustration of a rock pigeon, with a gray body, two dark wing bars, and iridescent neck."}
+    ]
+  }],
+  "run_configuration": {"fixture": true, "lesson": "Identify a bird species from an image", "focus": "Birds and waterfowl", "note": "Not an AgentSchool result"}
+}

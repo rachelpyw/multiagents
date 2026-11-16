@@ -1,0 +1,184 @@
+import asyncio
+import json
+import pytest
+from fastapi.testclient import TestClient
+
+from agentschool_viz import app as api
+from agentschool_viz.conversations import (
+    ConversationQueue, ConversationRequest, ConversationUnavailable, process_conversation,
+)
+from agentschool_viz.service import RunService
+from agentschool_viz.instrumentation import RunCapture
+from util.BroadcastSys import BroadcastSys
+
+
+class Recorder:
+    def __init__(self):
+        self.messages = []
+
+    def log_sync(self, event_type, details):
+        self.messages.append(details)
+
+
+class Agent:
+    def __init__(self, name):
+        self.name = name
+        self.infos = []
+
+    def receive_broadcast_sync(self, info):
+        self.infos.append(info)
+
+
+def setup_queue(tmp_path):
+    queue = ConversationQueue(tmp_path / "conversations.sqlite")
+    queue.initialize()
+    queue.set_ready(True)
+    receipt = queue.enqueue(ConversationRequest(source_id="A", target_id="B"))
+    recorder = Recorder()
+    broadcast = BroadcastSys(recorder)
+    broadcast.enable_debug(False)
+    students = {name: Agent(name) for name in ("A", "B")}
+    teacher = Agent("Teacher")
+    for student in students.values():
+        broadcast.subscribe(student, student.name)
+    broadcast.subscribe(teacher, "teacher")
+    return queue, receipt, broadcast, students, teacher
+
+
+def test_peer_exchange_reaches_next_observations_and_teacher_with_provenance(tmp_path):
+    queue, receipt, broadcast, students, teacher = setup_queue(tmp_path)
+    capture = RunCapture(tmp_path / "captured")
+    broadcast.add_event_listener(capture.record_broadcast)
+
+    async def generate(student, target):
+        if student.name == "B":
+            assert student.infos[0]["speaker"] == "A"
+            assert student.infos[0]["content"] == "Compare the bill."
+        return "<think>Not public</think>Compare the bill." if student.name == "A" else "I also see a neck ring."
+
+    asyncio.run(process_conversation(
+        queue, students, teacher, broadcast, "2025-09-01T08:03:00",
+        assistance_allowed=True, generate=generate,
+    ))
+    assert queue.receipt(receipt["request_id"])["status"] == "completed"
+    assert len(teacher.infos) == 2
+    assert students["A"].infos[0]["speaker"] == "B"
+    assert all(message["observer_request_id"] == receipt["request_id"] for message in teacher.infos)
+    events = [json.loads(line) for line in capture.events_path.read_text().splitlines()]
+    assert [event["payload"]["recipient_ids"] for event in events] == [["B"], ["Teacher"], ["A"], ["Teacher"]]
+    assert all(event["payload"]["observer_request_id"] == receipt["request_id"] for event in events)
+    assert queue.claim() is None
+
+
+def test_board_steering_uses_public_permissions_not_private_route_bypass(tmp_path):
+    from agentschool_viz.architecture import ArchitecturePolicy, LessonPhase, register_architecture_subscriptions
+    from test_architecture import configuration
+
+    queue, receipt, broadcast, students, teacher = setup_queue(tmp_path)
+    phase = LessonPhase(phase_id="board", label="Board", architecture="blackboard",
+                        blackboard={"readers": ["A", "B", "Teacher"], "writers": ["A", "B"]})
+    policy = ArchitecturePolicy(configuration(phase))
+    broadcast.set_delivery_policy(policy)
+    register_architecture_subscriptions(broadcast, policy, {**students, "Teacher": teacher})
+
+    async def generate(student, target):
+        return f"{student.name}'s visible board contribution"
+
+    asyncio.run(process_conversation(queue, students, teacher, broadcast, "now",
+                                    assistance_allowed=True, generate=generate))
+    assert queue.receipt(receipt["request_id"])["status"] == "completed"
+    assert len(teacher.infos) == 2
+    assert len(students["A"].infos) == len(students["B"].infos) == 1
+    assert all(message["receiver"] == "blackboard:write" for message in teacher.infos)
+
+
+@pytest.mark.parametrize("assistance_allowed", [True, False])
+def test_blocked_routes_and_independent_test_never_generate_or_deliver(tmp_path, assistance_allowed):
+    queue, receipt, broadcast, students, teacher = setup_queue(tmp_path)
+    if assistance_allowed:
+        broadcast.set_delivery_policy(lambda **context: context["target_id"] == "Teacher")
+
+    async def must_not_generate(student, target):
+        pytest.fail("A blocked request must not invoke a model")
+
+    asyncio.run(process_conversation(
+        queue, students, teacher, broadcast, "now",
+        assistance_allowed=assistance_allowed, generate=must_not_generate,
+    ))
+    assert queue.receipt(receipt["request_id"])["status"] == "rejected"
+    assert all(not student.infos for student in students.values())
+    assert not teacher.infos
+
+
+def test_teacher_does_not_observe_private_peer_exchange_without_route(tmp_path):
+    queue, receipt, broadcast, students, teacher = setup_queue(tmp_path)
+    broadcast.set_delivery_policy(lambda **context: context["target_id"] != "Teacher")
+
+    async def generate(student, target):
+        return "A visible observation."
+
+    asyncio.run(process_conversation(
+        queue, students, teacher, broadcast, "now", assistance_allowed=True, generate=generate,
+    ))
+    assert queue.receipt(receipt["request_id"])["status"] == "completed"
+    assert not teacher.infos
+    assert len(students["A"].infos) == len(students["B"].infos) == 1
+
+
+def test_failures_and_silence_are_not_reported_as_success(tmp_path):
+    queue, receipt, broadcast, students, teacher = setup_queue(tmp_path)
+
+    async def fail(student, target):
+        raise RuntimeError("provider unavailable")
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        asyncio.run(process_conversation(
+            queue, students, teacher, broadcast, "now", assistance_allowed=True, generate=fail,
+        ))
+    assert queue.receipt(receipt["request_id"])["status"] == "failed"
+    assert not queue.available()
+    queue.set_ready(True)
+    silent = queue.enqueue(ConversationRequest(source_id="A", target_id="B"))
+
+    async def decline(student, target):
+        return ""
+
+    asyncio.run(process_conversation(
+        queue, students, teacher, broadcast, "now", assistance_allowed=True, generate=decline,
+    ))
+    assert queue.receipt(silent["request_id"])["status"] == "declined"
+    assert not students["A"].infos and not students["B"].infos and not teacher.infos
+
+
+def test_queue_bounds_and_close_are_persistent(tmp_path):
+    queue, receipt, *_ = setup_queue(tmp_path)
+    with pytest.raises(ConversationUnavailable):
+        queue.enqueue(ConversationRequest(source_id="A", target_id="B"))
+    queue.close()
+    reloaded = ConversationQueue(queue.path)
+    assert not reloaded.available()
+    assert reloaded.receipt(receipt["request_id"])["status"] == "rejected"
+    with pytest.raises(ConversationUnavailable):
+        reloaded.enqueue(ConversationRequest(source_id="A", target_id="B"))
+
+
+def test_api_keeps_replays_immutable_and_accepts_only_live_roster(tmp_path, monkeypatch):
+    service = RunService(tmp_path)
+    original = service.manifest("synthetic-tutorial")
+    live = original.model_copy(update={"run_id": "live-test", "mode": "live"})
+    folder = tmp_path / "live-test" / "visualization"
+    folder.mkdir(parents=True)
+    (folder / "manifest.json").write_text(live.model_dump_json())
+    queue = ConversationQueue(folder / "conversations.sqlite")
+    queue.initialize()
+    queue.set_ready(True)
+    monkeypatch.setattr(api, "service", service)
+    client = TestClient(api.app)
+    request = {"source_id": "StudentA", "target_id": "StudentB"}
+    assert client.post("/api/runs/synthetic-tutorial/conversations", json=request).status_code == 409
+    assert client.post("/api/runs/live-test/conversations", json={**request, "target_id": "unknown"}).status_code == 422
+    response = client.post("/api/runs/live-test/conversations", json=request)
+    assert response.status_code == 202
+    receipt = client.get(f"/api/runs/live-test/conversations/{response.json()['request_id']}").json()
+    assert receipt["status"] == "queued"
+    assert service.events("synthetic-tutorial")  # The fixture remains readable and unchanged.

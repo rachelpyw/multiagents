@@ -282,7 +282,7 @@ class Student:
         """
         try:
             print(f"--- 现在是 {self.scratch.current_time} ---")
-            infos = self.infos
+            infos, self.infos = self.infos, []
             print(f"{self.name}当前收到的信息列表: {infos}")
             saving_folder_name = "student/saving"
             folder_name = f"{saving_folder_name}/{self.name}"
@@ -479,9 +479,6 @@ class Student:
                 except Exception as e:
                     print(f"发送广播消息出错: {e}")
 
-            # 清空当前信息列表
-            self.infos = []
-
             # 更新轮次
             self.current_turn += 1
 
@@ -505,8 +502,6 @@ class Student:
                 
         except Exception as e:
             print(f"move函数整体执行出错: {e}")
-            # 确保即使出错也清空信息列表
-            self.infos = []
             return None
     
     def update_time(self):

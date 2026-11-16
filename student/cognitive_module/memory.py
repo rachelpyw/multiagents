@@ -129,6 +129,13 @@ class Memory:
                 self.add_knowledge(created, 
                                     content, keywords, importance,
                                     embedding_pair, knowledge_tag, misconceptions=misconceptions)
+            node = self.id_to_node[node_id]
+            for field in ("s", "p", "o", "depth", "theme", "knowledge_tag", "event_type"):
+                if field in node_details:
+                    setattr(node, field, node_details[field])
+            node.expiration = expiration
+            if node_details.get("last_accessed"):
+                node.last_accessed = datetime.strptime(node_details["last_accessed"], "%Y-%m-%d %H:%M:%S")
 
     def save(self, out_json):
         r = dict()
@@ -143,6 +150,8 @@ class Memory:
             r[node_id]["depth"] = node.depth
 
             r[node_id]["created"] = node.created.strftime("%Y-%m-%d %H:%M:%S")
+            r[node_id]["last_accessed"] = node.last_accessed.strftime("%Y-%m-%d %H:%M:%S")
+            r[node_id]["theme"] = node.theme
             if node.expiration:
                 r[node_id]["expiration"] = node.expiration.strftime("%Y-%m-%d %H:%M:%S")
             else:
@@ -180,6 +189,8 @@ class Memory:
             r[node_id]["depth"] = node.depth
 
             r[node_id]["created"] = node.created.strftime("%Y-%m-%d %H:%M:%S")
+            r[node_id]["last_accessed"] = node.last_accessed.strftime("%Y-%m-%d %H:%M:%S")
+            r[node_id]["theme"] = node.theme
             if node.expiration:
                 r[node_id]["expiration"] = node.expiration.strftime("%Y-%m-%d %H:%M:%S")
             else:

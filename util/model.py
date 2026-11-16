@@ -61,6 +61,25 @@ evaluation_client_sync = OpenAI(
     base_url=config["evaluation_api_url"]
 )
 
+def language_messages(messages: list) -> list:
+    if os.getenv("AGENTSCHOOL_OUTPUT_LANGUAGE") != "en":
+        return messages
+    policy = (
+        "This classroom is for English speakers. Write all natural-language prose, dialogue, "
+        "feedback, reflections, misconceptions, summaries, and JSON text values in English only. "
+        "Do not quote or echo Chinese prose. Preserve required JSON keys, ontology identifiers, "
+        "and exact enumerated machine labels requested by the schema, including teaching-method "
+        "and focus codes; translate their descriptions, not those codes. "
+        "When plain speech is requested, output only English speech, with no schema metadata."
+    )
+    requested_schema = "\n".join(str(message.get("content", "")) for message in messages if message.get("role") == "user")
+    if '"method"' in requested_schema:
+        policy += (" CRITICAL: the requested plan's method field must remain exactly one of "
+                   "'陈述知识点', '向同学提问', '对接收到的回答进行评价'. Never translate these method values.")
+    if "event_type" in requested_schema:
+        policy += " For event_type preserve the required codes '师生问答' and '小组讨论'."
+    return [*messages, {"role": "system", "content": policy}]
+
 
 async def call_LLM(role: str, messages: list, response_format: dict = None, temperature: float = 0.7):
     """
@@ -97,7 +116,7 @@ async def call_LLM(role: str, messages: list, response_format: dict = None, temp
     # 构造请求参数
     params = {
         "model": model,
-        "messages": messages,
+        "messages": language_messages(messages),
         "temperature": temperature,
         "stream": False
     }
@@ -110,9 +129,7 @@ async def call_LLM(role: str, messages: list, response_format: dict = None, temp
         completion = await client.chat.completions.create(**params)
         return completion.choices[0].message.content
     except Exception as e:
-        print(f"[ERROR] 调用异步 LLM 失败: {e}")
-        # 返回错误信息以便后续处理
-        return f"LLM error: {e}"
+        raise RuntimeError(f"Native {role} provider failed: {type(e).__name__}.") from None
 
 
 def call_LLM_sync(role: str, messages: list, response_format: dict = None, temperature: float = 0.7):
@@ -150,7 +167,7 @@ def call_LLM_sync(role: str, messages: list, response_format: dict = None, tempe
     # 构造请求参数
     params = {
         "model": model,
-        "messages": messages,
+        "messages": language_messages(messages),
         "temperature": temperature,
         "stream": False
     }
@@ -163,6 +180,4 @@ def call_LLM_sync(role: str, messages: list, response_format: dict = None, tempe
         completion = client.chat.completions.create(**params)
         return completion.choices[0].message.content
     except Exception as e:
-        print(f"[ERROR] 调用同步 LLM 失败: {e}")
-        # 返回错误信息以便后续处理
-        return f"LLM error: {e}"
+        raise RuntimeError(f"Native {role} provider failed: {type(e).__name__}.") from None
