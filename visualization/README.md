@@ -72,7 +72,7 @@ The integration adapts the outer scheduler to one UI-controlled class rather tha
 
 The configured turn budget bounds class rounds, **not the number of model requests**: native stages can make multiple requests per message. Lesson cost is therefore no longer capped at 64 requests. Message/time thresholds are checked between complete native rounds; an in-flight round and final feedback/experience update can exceed those thresholds. Native token-budget requests are rejected rather than advertised as enforced. Sessions are stored under `logs/native-*/visualization/`; isolated native code, student memories, knowledge graph, teacher databases, and class checkpoints are under that directory's `runtime/`. Stage telemetry contains endpoint/status evidence, not private reasoning. Failures are explicit; there is no lightweight or synthetic fallback.
 
-The room uses the user-supplied empty classroom backdrop within the existing SVG renderer. Standing, aisle movement, test seats, rings, labels, and routes use the same image-space coordinates; walking never changes learning records.
+The room uses the user-supplied empty classroom backdrop within the existing SVG renderer. The bottom dialogue uses 14px text with a scrollable three-line message area so the classroom occupies the remaining space. Standing, aisle movement, test seats, rings, labels, and routes use the same image-space coordinates; walking never changes learning records.
 
 ## Run AgentSchool and select a run
 

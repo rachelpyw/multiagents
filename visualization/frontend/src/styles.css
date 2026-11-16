@@ -1147,7 +1147,7 @@ html body .game-shell, html body .game-shell * { font-family: "Helvetica Neue", 
 .mode-select { color: #c7d0bc; font-weight: 500; }
 .game-shell select { color: #edf1e4; color-scheme: dark; background: #232d27; border: 1px solid #aebf8b50; border-radius: 5px; box-shadow: none; font-size: 13px; }
 .room-stage, .pixel-room { background: transparent; }
-.pixel-room { grid-template-rows: minmax(0, 1fr) auto; gap: 14px; padding: 18px 8px 66px; }
+.pixel-room { grid-template-rows: minmax(0, 1fr) auto; gap: 8px; padding: 8px 8px 62px; }
 .pixel-room svg { min-height: 0; }
 .pixel-room .game-dialogue { position: relative; left: auto; right: auto; bottom: auto; width: 100%; }
 .insight-drawer { margin: 14px 14px 14px 0; grid-template-rows: auto auto minmax(0, 1fr); border: 1px solid #b9c99545; border-radius: 12px 3px 12px 3px; background: rgba(22, 30, 25, .84); backdrop-filter: blur(18px); box-shadow: 0 16px 50px #0005, inset 0 1px #e4efbc12; }
@@ -1201,14 +1201,14 @@ html body .game-shell, html body .game-shell * { font-family: "Helvetica Neue", 
 .filtered-results li { display: flex; align-items: center; gap: 10px; padding: 10px; font-size: 12px; border-bottom: 1px solid #c6d0b625; }
 .filtered-results img { width: 60px; image-rendering: pixelated; }
 .filtered-results small { display: block; margin-top: 4px; color: #a7b49b; }
-.game-dialogue { color: #edf0e3; background: rgba(20, 29, 24, .9); backdrop-filter: blur(18px); border: 1px solid #c0ce9b66; border-radius: 10px 3px 10px 3px; padding: 16px 20px; box-shadow: 0 12px 40px #0005, inset 0 1px #eff7c511; }
-.game-dialogue p { margin: 12px 0 3px; font-size: clamp(19px, 1.35vw, 23px); line-height: 1.55; min-height: 58px; max-height: 180px; }
-.classroom-taskline { color: #aebd9c; border-color: #c0ce9b28; font-size: 13px; padding-bottom: 12px; }
+.game-dialogue { color: #edf0e3; background: rgba(20, 29, 24, .9); backdrop-filter: blur(18px); border: 1px solid #c0ce9b66; border-radius: 10px 3px 10px 3px; padding: 10px 14px; box-shadow: 0 12px 40px #0005, inset 0 1px #eff7c511; }
+.game-dialogue p { margin: 6px 0 0; font-size: 14px; line-height: 1.5; min-height: 21px; max-height: 63px; }
+.classroom-taskline { color: #aebd9c; border-color: #c0ce9b28; font-size: 12px; padding-bottom: 8px; }
 .classroom-taskline > strong { font-weight: 500; }
-.game-dialogue .dialogue-speaker { color: #e7d995; margin-top: 12px; font-size: 16px; }
+.game-dialogue .dialogue-speaker { color: #e7d995; margin-top: 6px; font-size: 13px; }
 .game-dialogue .dialogue-speaker strong { font-weight: 500; }
 .game-dialogue button, .pixel-button, .pixel-button.primary { border: 1px solid #bac78d60; border-radius: 4px; color: #edf1dd; background: #35432c; box-shadow: none; font-weight: 500; }
-.game-dialogue .steering-state, .game-dialogue .start-test-button, .game-dialogue .next-class-button { padding: 8px 12px; font-size: 13px; border: 1px solid #bac78d60; box-shadow: none; }
+.game-dialogue .steering-state, .game-dialogue .start-test-button, .game-dialogue .next-class-button { padding: 6px 10px; font-size: 12px; border: 1px solid #bac78d60; box-shadow: none; }
 .game-dialogue .steering-state:disabled { color: #98a58b; background: #b6c59608; border: 1px solid #b6c59625; }
 .game-dialogue .steering-state.ready, .game-dialogue .next-class-button { color: #1b2519; background: #d5d98d; border-color: #e8edb5; }
 .game-dialogue .steering-proof { color: #dfdfac; background: #c3cc8020; border: 1px solid #c3cc803a; border-radius: 4px; }
@@ -1225,9 +1225,10 @@ html body .game-shell, html body .game-shell * { font-family: "Helvetica Neue", 
 .speaking .sprite-name { fill: #22291b; font-weight: 700; }
 .drawer-open-button { color: #dbe5ca; background: #273923d9; border: 1px solid #bac78d60; box-shadow: none; }
 
-.steering-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 12px; }
+.steering-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 6px; }
 .steering-controls label { display: flex; align-items: center; gap: 8px; color: #d3ddc2; font-size: 13px; }
 .steering-controls select, .test-student-filter select { color: #edf1dd; background: #263225; border: 1px solid #bac78d60; border-radius: 4px; padding: 8px; font: inherit; }
+.steering-controls select { padding: 5px 8px; }
 .steering-controls small { color: #b7c5a5; font-size: 12px; max-width: 380px; }
 .bird-test-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
 .bird-test-grid figure { margin: 0; padding: 8px; border: 1px solid #c6d0b625; border-radius: 6px; background: #d6e5ad06; }
