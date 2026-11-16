@@ -53,7 +53,11 @@ it("queues a nearby live conversation, follows its recorded dialogue, and preven
       : {status: "completed", detail: "2 messages delivered."};
     return new Response(JSON.stringify(body));
   });
-  let stream: {onmessage: ((event: {data: string}) => void) | null} | undefined;
+  let stream: {
+    onmessage: ((event: {data: string}) => void) | null;
+    onopen: (() => void) | null;
+    onerror: (() => void) | null;
+  } | undefined;
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("EventSource", class {
     onopen = null;
@@ -65,6 +69,10 @@ it("queues a nearby live conversation, follows its recorded dialogue, and preven
   render(<App />);
   await screen.findByRole("region", {name: "Classroom dialogue"});
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/runs/live/conversations"));
+  act(() => stream?.onerror?.());
+  expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).toContain("Connection lost; reconnecting");
+  act(() => stream?.onopen?.());
+  expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).not.toContain("Connection lost; reconnecting");
   fireEvent.click(screen.getByRole("button", {name: "Select B"}));
   fireEvent.click(document.querySelector('[data-floor-x="428"][data-floor-y="556"]')!);
   await waitFor(() => expect(screen.getByRole("button", {name: "Select B"}).classList.contains("walking"))
@@ -80,6 +88,8 @@ it("queues a nearby live conversation, follows its recorded dialogue, and preven
     .toContain("Compare its yellow bill."));
   await waitFor(() => expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent)
     .toContain("Steering delivered"));
+  act(() => stream?.onopen?.());
+  expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).toContain("Steering delivered");
 
   fireEvent.change(screen.getByRole("slider", {name: "Replay playhead"}), {target: {value: "0"}});
   fireEvent.keyDown(document.body, {code: "Space"});

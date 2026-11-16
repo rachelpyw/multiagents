@@ -1,9 +1,11 @@
+import asyncio
 from datetime import timedelta
 import hashlib
 import hmac
 import logging
 import os
 from pathlib import Path
+from time import monotonic
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -45,12 +47,16 @@ async def classroom_origin() -> str:
             capture_output=True, check=True,
         )
 
+    deadline = monotonic() + 240
     result = await ensure()
     if result.stdout.strip() == b"needs-source":
         await box.fs.write_bytes(
             f"/vercel/sandbox/classroom-source-{revision}.tar.gz",
             Path(__file__).with_name("classroom-source.tar.gz").read_bytes(),
         )
+        result = await ensure()
+    while result.stdout.strip() == b"starting" and monotonic() < deadline:
+        await asyncio.sleep(3)
         result = await ensure()
     if result.stdout.strip() != b"ready":
         detail = ("Native classroom startup failed. Check this project's Sandbox startup log."

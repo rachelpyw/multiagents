@@ -85,6 +85,7 @@ export default function App() {
     if (manifest?.mode !== "live") return;
     const source = new EventSource(`/api/runs/${manifest.run_id}/stream`);
     source.onerror = () => setConversationNotice("Connection lost; reconnecting…");
+    source.onopen = () => setConversationNotice((notice) => notice === "Connection lost; reconnecting…" ? "" : notice);
     source.onmessage = (message) => {
       const event = JSON.parse(message.data) as NormalizedEvent;
       setEvents((current) => current.some((item) => item.event_id === event.event_id) ? current : [...current, event]);

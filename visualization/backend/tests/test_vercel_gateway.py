@@ -34,6 +34,8 @@ def test_gateway_startup_is_explicit_and_never_uses_synthetic_fallback(gateway, 
     monkeypatch.setenv("SCHOOLAGENT_API_KEY", "unit-test-placeholder")
     monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "test-revision")
     monkeypatch.setenv("VERCEL_ENV", "production")
+    clock = iter([0, 241])
+    monkeypatch.setattr(gateway, "monotonic", lambda: next(clock))
     box = SimpleNamespace(
         fs=SimpleNamespace(write_text=AsyncMock()),
         run_command=AsyncMock(return_value=SimpleNamespace(stdout=b"starting\n")),
@@ -89,6 +91,23 @@ def test_gateway_uploads_committed_source_when_runtime_needs_it(gateway, monkeyp
     box.fs.write_bytes.assert_awaited_once_with(
         "/vercel/sandbox/classroom-source-test-revision.tar.gz", b"committed-source",
     )
+    assert box.run_command.await_count == 2
+
+
+def test_gateway_waits_for_cold_start_before_serving_first_request(gateway, monkeypatch):
+    monkeypatch.setenv("SCHOOLAGENT_API_KEY", "unit-test-placeholder")
+    monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "test-revision")
+    monkeypatch.setattr(gateway.asyncio, "sleep", AsyncMock())
+    box = SimpleNamespace(
+        fs=SimpleNamespace(write_text=AsyncMock()),
+        run_command=AsyncMock(side_effect=[
+            SimpleNamespace(stdout=b"starting\n"), SimpleNamespace(stdout=b"ready\n"),
+        ]),
+        current_session_id="session-1",
+        routes=[SimpleNamespace(port=8000, url="https://native.invalid")],
+    )
+    monkeypatch.setattr(gateway.sandbox, "get_or_create_sandbox", AsyncMock(return_value=(box, False)))
+    assert asyncio.run(gateway.classroom_origin()) == "https://native.invalid"
     assert box.run_command.await_count == 2
 
 
