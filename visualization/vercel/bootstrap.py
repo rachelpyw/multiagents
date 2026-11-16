@@ -4,6 +4,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -66,6 +67,9 @@ def start(revision: str, session: str) -> None:
         dependency_revision = HOME / "classroom-dependencies.txt"
         manifest_bytes = (CODE / "visualization/backend/pyproject.toml").read_bytes()
         if not dependency_revision.exists() or dependency_revision.read_bytes() != manifest_bytes:
+            if shutil.which("g++") is None:
+                subprocess.run(["sudo", "-n", "apt-get", "update"], check=True)
+                subprocess.run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends", "g++"], check=True)
             subprocess.run(["uv", "pip", "install", "--python", str(python), "torch",
                             "--index-url", "https://download.pytorch.org/whl/cpu"], check=True)
             subprocess.run(["uv", "pip", "install", "--python", str(python),
