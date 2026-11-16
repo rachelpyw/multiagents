@@ -133,3 +133,31 @@ def test_model_receives_png_pixels_without_observer_answer_metadata_and_recall_h
     with pytest.raises(RuntimeError, match="Model request failed: OpenAIError") as error:
         model.answer("Recall the bill color.", context, None)
     assert "PRIVATE_PROVIDER_DETAIL" not in str(error.value)
+
+
+def test_six_bird_test_uses_seven_independent_answers_and_no_recall_picture(tmp_path, monkeypatch):
+    service, source, output = lesson(tmp_path)
+    source.assessment_definitions = [classroom_tests.bird_lesson()["assessment"]]
+    write_manifest(output, source)
+    monkeypatch.setattr(classroom_tests, "provider_configured", lambda: True)
+    monkeypatch.setattr(classroom_tests, "launch_worker", lambda *args: None)
+    test = create_test_run(service, source.run_id)
+    blueprint = bird_blueprint()
+    seen = []
+
+    class Model:
+        def answer(self, prompt, context, image):
+            item = next(item for item in blueprint.items if item.prompt == prompt)
+            assert "expected_response" not in json.dumps(context)
+            if item.task_type == "classification":
+                assert provider.image_data_url(image).startswith("data:image/png;base64,")
+            else:
+                assert image is None
+            seen.append((item.task_type, image))
+            return item.answer_key
+
+    execute_test(service._run_dir(test.run_id), output, Model())
+    assert len({image for kind, image in seen if kind == "classification"}) == 6
+    results = [event.payload for event in service.events(test.run_id) if event.event_kind == "assessment"]
+    assert len(seen) == 14
+    assert all(result["correct_count"] == result["expected_count"] == 7 for result in results)

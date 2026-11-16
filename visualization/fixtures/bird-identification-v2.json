@@ -1,0 +1,25 @@
+{
+  "lesson_content": "Identify six bird species by comparing multiple visible field marks, not color alone. A male mallard has a glossy green head, yellow bill, and white neck ring. A male green-winged teal has a chestnut head and green eye patch. A rock pigeon has a gray body, two dark wing bars, and an iridescent neck. A Canada goose has a long black neck, white chinstrap, and brown body. A mute swan has a white body, long curved neck, and orange bill with a black base. A male northern cardinal has red plumage, a pointed crest, and a black face mask around a stout orange-red bill. Compare the pictured examples and preserve uncertainty when field marks are unclear. All six species are taught; the independent test also asks students to recall the mallard's bill color without a picture.",
+  "resources": [
+    "/lesson-images/mallard-pixel.svg",
+    "/lesson-images/teal-pixel.svg",
+    "/lesson-images/pigeon-pixel.svg",
+    "/lesson-images/goose-pixel.svg",
+    "/lesson-images/swan-pixel.svg",
+    "/lesson-images/cardinal-pixel.svg"
+  ],
+  "assessment": {
+    "assessment_id": "bird-identification-v2",
+    "items": 7,
+    "mode": "independent",
+    "item_definitions": [
+      {"item_id": "q1", "label": "Mallard", "concept_id": "bird.mallard", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Mallard", "answer_aliases": ["Mallard duck", "Anas platyrhynchos"], "image_url": "/lesson-images/mallard-pixel.svg", "image_alt": "Pixel illustration of a male mallard with a green head, yellow bill, and white neck ring."},
+      {"item_id": "q2", "label": "Green-winged teal", "concept_id": "bird.teal", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Green-winged teal", "answer_aliases": ["American green-winged teal", "Anas carolinensis", "Anas crecca"], "image_url": "/lesson-images/teal-pixel.svg", "image_alt": "Pixel illustration of a male green-winged teal with a chestnut head and green eye patch."},
+      {"item_id": "q4", "label": "Rock pigeon", "concept_id": "bird.pigeon", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Rock pigeon", "answer_aliases": ["Rock dove", "Columba livia"], "image_url": "/lesson-images/pigeon-pixel.svg", "image_alt": "Pixel illustration of a rock pigeon with a gray body, two dark wing bars, and an iridescent neck."},
+      {"item_id": "q5", "label": "Canada goose", "concept_id": "bird.goose", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Canada goose", "answer_aliases": ["Branta canadensis"], "image_url": "/lesson-images/goose-pixel.svg", "image_alt": "Pixel illustration of a Canada goose with a black neck, white chinstrap, and brown body."},
+      {"item_id": "q6", "label": "Mute swan", "concept_id": "bird.swan", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Mute swan", "answer_aliases": ["Cygnus olor"], "image_url": "/lesson-images/swan-pixel.svg", "image_alt": "Pixel illustration of a mute swan with a white body, curved neck, and orange bill with a black base."},
+      {"item_id": "q7", "label": "Northern cardinal", "concept_id": "bird.cardinal", "task_type": "classification", "prompt": "Identify this pictured bird species.", "expected_response": "Northern cardinal", "answer_aliases": ["Cardinal", "Cardinalis cardinalis"], "image_url": "/lesson-images/cardinal-pixel.svg", "image_alt": "Pixel illustration of a male northern cardinal with red plumage, a pointed crest, and a black face mask."},
+      {"item_id": "q3", "label": "Bill-color recall", "task_type": "recall", "prompt": "Without hints or a picture, what color was the mallard's bill in the lesson?", "expected_response": "Yellow"}
+    ]
+  }
+}

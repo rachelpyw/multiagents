@@ -27,6 +27,7 @@ def steering_ids(messages: list[dict]) -> list[str]:
 
 def create_native_run(service: RunService, source_id: str, request: StartModeRequest, *, continuation: bool = False) -> RunManifest:
     from .provider import provider_configured
+    from .classroom_tests import bird_lesson
 
     source = service.manifest(source_id)
     if not provider_configured():
@@ -44,10 +45,11 @@ def create_native_run(service: RunService, source_id: str, request: StartModeReq
         raise ValueError("Native token-budget enforcement is unavailable; use round, message, or time boundaries.")
     previous_runtime = None
     if continuation:
-        if (source.mode != "recorded" or source.run_configuration.get("runner") != "assessment"
+        if (source.mode != "recorded" or source.run_configuration.get("runner") not in {"assessment", "native"}
                 or source.run_configuration.get("status") not in {"complete", "complete_with_errors"}):
-            raise ValueError("Finish the test before starting the next class.")
-        lesson = service.manifest(source.run_configuration["source_run_id"])
+            raise ValueError("Finish the current class or test before resuming the live classroom.")
+        lesson = (service.manifest(source.run_configuration["source_run_id"])
+                  if source.run_configuration.get("runner") == "assessment" else source)
         if lesson.run_configuration.get("runner") != "native":
             raise ValueError("This historical test used the old lightweight runner. Choose a mode to begin a native AgentSchool class.")
         if lesson.run_configuration.get("language") != "en":
@@ -66,6 +68,9 @@ def create_native_run(service: RunService, source_id: str, request: StartModeReq
                               "class_number": int(source.run_configuration.get("class_number", 1)) + 1 if continuation else 1,
                               **({"previous_class_run_id": source_id} if continuation else {})},
     })
+    definition = bird_lesson()["assessment"]
+    if request.configuration.assessment.blueprint_id == definition["assessment_id"]:
+        manifest.assessment_definitions = [definition]
     write_manifest(output, manifest)
     (output / "events.jsonl").touch()
     if previous_runtime:
@@ -88,6 +93,8 @@ def prepare_runtime(output: Path, manifest: RunManifest) -> Path:
                 destination = runtime / source.relative_to(PROJECT_ROOT)
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
+        (runtime / "teacher/Textbook/sections.json").write_text(json.dumps(
+            {"sections": ["", manifest.run_configuration["experiment"]["lesson_content"]]}))
         return runtime
     runtime.mkdir(exist_ok=True)
     for folder in ("student", "teacher", "util", "config"):
@@ -132,8 +139,10 @@ def prepare_runtime(output: Path, manifest: RunManifest) -> Path:
             (folder / name).write_text("{}")
         curriculum[config["grade"]] = {"nodes": [
             {"id": "bird.fieldmarks", "name": "Identifying birds from multiple field marks", "parent_id": None},
-            {"id": "bird.mallard", "name": "Mallard field marks", "parent_id": "bird.fieldmarks"},
-            {"id": "bird.teal", "name": "Green-winged teal field marks", "parent_id": "bird.fieldmarks"},
+            *[{"id": item.get("concept_id", "bird." + item["item_id"]),
+               "name": item["label"] + " field marks", "parent_id": "bird.fieldmarks"}
+              for item in manifest.assessment_definitions[0]["item_definitions"]
+              if item["task_type"] == "classification"],
         ]}
     (runtime / "student/数学知识点.json").write_text(json.dumps(curriculum))
     return runtime

@@ -178,3 +178,30 @@ def test_native_steering_provenance_uses_only_delivered_input_and_preserves_inhe
         {"observer_request_id": None, "steering_context_ids": None},
     ]) == ["direct", "inherited"]
     assert native_runs.steering_ids([{"content": "No intervention was delivered"}]) == []
+
+
+def test_resume_completed_class_upgrades_preset_without_erasing_native_memory(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from agentschool_viz import app as api
+
+    service, source, output = lesson(tmp_path)
+    source.run_configuration.update(runner="native", language="en", status="complete", class_number=1)
+    source.run_configuration["experiment"]["status"] = "preset"
+    write_manifest(output, source)
+    runtime = native_runs.prepare_runtime(output, source)
+    (runtime / "checkpoint.json").write_text('{"clock":"2025-09-01T08:30:00"}')
+    memory = runtime / "student/students/StudentA/nodes.json"
+    memory.write_text('{"saved":"retained knowledge"}')
+    monkeypatch.setattr(api, "service", service)
+    monkeypatch.setattr(provider, "provider_configured", lambda: True)
+    monkeypatch.setattr(native_runs.importlib.util, "find_spec", lambda _: True)
+    monkeypatch.setattr(native_runs, "launch_worker", lambda *args: None)
+    response = TestClient(api.app).post("/api/runs/lesson/next-class")
+    assert response.status_code == 201
+    resumed = service.manifest(response.json()["run_id"])
+    assert resumed.run_configuration["class_number"] == 2
+    assert len(resumed.assessment_definitions[0]["item_definitions"]) == 7
+    assert "Canada goose" in resumed.run_configuration["experiment"]["lesson_content"]
+    resumed_runtime = native_runs.prepare_runtime(service._run_dir(resumed.run_id), resumed)
+    assert (resumed_runtime / "student/students/StudentA/nodes.json").read_bytes() == memory.read_bytes()
+    assert "Canada goose" in (resumed_runtime / "teacher/Textbook/sections.json").read_text()

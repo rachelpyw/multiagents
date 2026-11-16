@@ -19,9 +19,13 @@ from .schemas import NormalizedEvent, RunManifest, SourceRecordRef
 from .service import RunService
 
 
-def bird_blueprint() -> AssessmentBlueprint:
-    reference = json.loads((PROJECT_ROOT / "visualization/fixtures/synthetic-tutorial/manifest.json").read_text())
-    definition = reference["assessment_definitions"][0]
+def bird_lesson() -> dict[str, Any]:
+    return json.loads((PROJECT_ROOT / "visualization/fixtures/bird-identification-v2.json").read_text())
+
+
+def bird_blueprint(definition: dict[str, Any] | None = None) -> AssessmentBlueprint:
+    if definition is None:
+        definition = bird_lesson()["assessment"]
     aliases = {"q1": ("Mallard duck", "Anas platyrhynchos"),
                "q2": ("American green-winged teal", "Anas carolinensis", "Anas crecca"),
                "q4": ("Rock dove", "Columba livia")}
@@ -30,7 +34,7 @@ def bird_blueprint() -> AssessmentBlueprint:
             item_id=item["item_id"], prompt=f'Question {item["item_id"]}. {item["prompt"]}',
             answer_key=item["expected_response"], label=item["label"], task_type=item["task_type"],
             image_url=item.get("image_url"), image_alt=item.get("image_alt"),
-            answer_aliases=aliases.get(item["item_id"], ()),
+            answer_aliases=tuple(item.get("answer_aliases", aliases.get(item["item_id"], ()))),
         ) for item in definition["item_definitions"]
     ))
 
@@ -46,7 +50,7 @@ def create_test_run(service: RunService, source_id: str) -> RunManifest:
         raise ValueError("Choose a mode to start an English classroom before testing. Older recordings are preserved.")
     if not provider_configured():
         raise ValueError("A model-provider key is required to evaluate the students.")
-    blueprint = bird_blueprint()
+    blueprint = bird_blueprint(source.assessment_definitions[0])
     if not source.roster or len(source.roster) * len(blueprint.items) > 64:
         raise ValueError("This test supports up to 64 model answers per session.")
     source_output = service._run_dir(source_id)
@@ -110,7 +114,7 @@ def execute_test(output: Path, source_output: Path, provider: Any = None) -> Non
                 payload["source_event_ids"] = [identifiers.get(event_id, event_id) for event_id in payload["source_event_ids"]]
             journal.append(event.event_kind, payload, event.student_ids, simulation_time=event.simulation_time,
                            sources=[*event.source_record_refs, SourceRecordRef(path=str(source_output / "events.jsonl"), line=index + 1)])
-        blueprint = bird_blueprint()
+        blueprint = bird_blueprint(manifest.assessment_definitions[0])
         configuration = ExperimentConfiguration.model_validate(manifest.run_configuration["experiment"])
         if provider is None:
             provider = ClassroomProvider(configuration, teacher_id)

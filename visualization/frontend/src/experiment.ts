@@ -1,4 +1,5 @@
 import {RunManifest} from "./types";
+import birdLesson from "../../fixtures/bird-identification-v2.json";
 
 export type ArchitectureKind = "supervisor" | "pipeline" | "decentralized" | "blackboard";
 
@@ -149,14 +150,13 @@ export function createPreset(manifest: RunManifest, architecture: ArchitectureKi
     label: architectureLabels[architecture],
     status: "preset",
     agents,
-    lesson_content: "Compare the two lesson illustrations. A male mallard has a green head, yellow bill and white neck ring. "
-      + "A male green-winged teal has a chestnut head and green eye patch. Teach and compare several field marks; preserve uncertainty.",
-    resources: ["/lesson-images/mallard-pixel.svg", "/lesson-images/teal-pixel.svg"],
+    lesson_content: birdLesson.lesson_content,
+    resources: [...birdLesson.resources],
     shared_artifacts: architecture === "pipeline" ? ["evidence-card"] : architecture === "blackboard" ? ["class-board"] : [],
     phases: [phase],
     budget: {max_turns: 24, max_messages: 40},
     assessment: {
-      blueprint_id: String(manifest.assessment_definitions?.[0]?.assessment_id ?? "fixed-comparable"),
+      blueprint_id: birdLesson.assessment.assessment_id,
       fixed_items: true,
       independent: true,
       assistance_disabled: true,

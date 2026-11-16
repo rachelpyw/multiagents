@@ -27,7 +27,7 @@ it.each([true, false])("opens an English recording or demo rather than older non
   expect(fetchMock).not.toHaveBeenCalledWith("/api/runs/older-language/manifest");
 });
 
-it("queues a nearby live conversation, follows its recorded dialogue, and prevents historical steering", async () => {
+it("queues live steering during dialogue and while viewing earlier messages", async () => {
   const manifest: RunManifest = {
     schema_version: "1.0", run_id: "live", mode: "live", label: "Live test",
     created_at: "2025-09-01T08:00:00", upstream_commit: "test", concept_mapping: {},
@@ -42,6 +42,7 @@ it("queues a nearby live conversation, follows its recorded dialogue, and preven
     source_record_refs: [{path: "test"}],
     payload: {speaker_id: "Teacher", content: "What bird is this?", interaction_type: "question"},
   };
+  manifest.run_configuration = {experiment: createPreset(manifest, "decentralized")};
   const request = vi.fn(async (_url: string, _options: RequestInit) =>
     new Response(JSON.stringify({request_id: "request-1"}), {status: 202}));
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
@@ -93,8 +94,8 @@ it("queues a nearby live conversation, follows its recorded dialogue, and preven
 
   fireEvent.change(screen.getByRole("slider", {name: "Replay playhead"}), {target: {value: "0"}});
   fireEvent.keyDown(document.body, {code: "Space"});
-  expect(request).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).toContain("You are viewing history");
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).toContain("Steering still goes to the current live class");
   expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).not.toContain("Compare its yellow bill.");
   fireEvent.click(screen.getByRole("button", {name: "Follow live"}));
   await waitFor(() => expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent)
@@ -131,7 +132,7 @@ it("starts a separate mode session and retains its mode after loading the new re
   expect(screen.getByRole("region", {name: "Classroom dialogue"})).toBeTruthy();
 });
 
-it("starts a test, seats the full roster before results, and displays real incoming progress", async () => {
+it("opens a dedicated test view with real incoming progress and keeps the seated classroom accessible", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   const lesson: RunManifest = {
     schema_version: "1.0", run_id: "lesson", mode: "recorded", label: "Lesson", concept_mapping: {},
@@ -172,11 +173,15 @@ it("starts a test, seats the full roster before results, and displays real incom
   render(<App />);
   fireEvent.click(await screen.findByRole("button", {name: "Start test"}));
   await waitFor(() => expect(post).toHaveBeenCalledWith("/api/runs/lesson/tests"));
+  await screen.findByRole("region", {name: "Independent bird test"});
+  expect(screen.getByText("0/6 students finished")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", {name: "Back to classroom"}));
   await waitFor(() => expect(document.querySelectorAll("[data-desk-id]")).toHaveLength(6));
   expect(new Set([...document.querySelectorAll("[data-desk-id]")].map((element) => (element as SVGElement).style.transform)).size).toBe(6);
   expect(screen.getByText("Steering off · test")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", {name: "View test"}));
   act(() => stream?.onmessage?.({data: JSON.stringify(result)}));
-  await waitFor(() => expect(screen.getByText("1/6 student results received.")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("1/6 students finished")).toBeTruthy());
   completed = true;
-  await waitFor(() => expect(screen.getByText("6/6 student results received.")).toBeTruthy(), {timeout: 2500});
+  await waitFor(() => expect(screen.getByText("6/6 students finished")).toBeTruthy(), {timeout: 2500});
 });

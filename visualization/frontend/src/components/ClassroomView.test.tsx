@@ -65,6 +65,18 @@ describe("classroom live dialogue", () => {
       .toContain("Side conversation");
   });
 
+  it("can steer a speaking student directly without moving onto occupied tiles or leaving history", () => {
+    const roster = [...manifest.roster, {...manifest.roster[0], student_id: "C", display_name: "Student C"}];
+    const live = {...manifest, roster};
+    render(<ClassroomView {...props} manifest={live} selectedStudent="A" followingLive={false}
+      activePhase={createPreset(live, "blackboard").phases[0]} />);
+    fireEvent.change(screen.getByRole("combobox", {name: "Conversation partner"}), {target: {value: "C"}});
+    fireEvent.click(screen.getByRole("button", {name: "Space · Talk to Student C"}));
+    expect(props.onTalk).toHaveBeenCalledExactlyOnceWith("C");
+    expect(document.querySelector(".speaking .sprite-nameplate")?.textContent).toBe("Student A");
+    expect(screen.getByText("The bill is yellow.")).toBeTruthy();
+  });
+
   it("does not trigger live requests in replay or reveal an invisible selected message", () => {
     const {rerender} = render(<ClassroomView {...props} />);
     rerender(<ClassroomView {...props} manifest={{...manifest, mode: "recorded", roster: manifest.roster.slice(0, 1)}}

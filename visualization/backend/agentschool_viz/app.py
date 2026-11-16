@@ -11,7 +11,7 @@ from .service import RunNotFoundError, RunService
 from .architecture import ExperimentConfiguration, configuration_schema
 from .conversations import ConversationQueue, ConversationRequest, ConversationUnavailable
 from .mode_runs import StartModeRequest, create_mode_run
-from .classroom_tests import create_test_run
+from .classroom_tests import bird_lesson, create_test_run
 from .provider import provider_configured
 from .native_runs import create_native_run
 
@@ -53,6 +53,11 @@ def next_class(run_id: str):
         source = service.manifest(run_id)
         request = StartModeRequest(configuration=source.run_configuration["experiment"],
                                    execution=source.run_configuration["execution"])
+        if request.configuration.status == "preset":
+            lesson = bird_lesson()
+            request.configuration.lesson_content = lesson["lesson_content"]
+            request.configuration.resources = lesson["resources"]
+            request.configuration.assessment.blueprint_id = lesson["assessment"]["assessment_id"]
         return create_native_run(service, run_id, request, continuation=True).model_dump()
     except RunNotFoundError as error:
         raise HTTPException(status_code=404, detail="Run not found") from error

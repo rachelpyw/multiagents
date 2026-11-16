@@ -93,6 +93,7 @@ interface Props {
   testStarting: boolean;
   testCompleted: number;
   onNextClass: () => void;
+  onViewTest?: () => void;
   canNextClass: boolean;
   classStarting: boolean;
   followingLive: boolean;
@@ -190,6 +191,7 @@ export function ClassroomView({
   testStarting,
   testCompleted,
   onNextClass,
+  onViewTest,
   canNextClass,
   classStarting,
   followingLive,
@@ -206,6 +208,7 @@ export function ClassroomView({
   const [walkingStudents, setWalkingStudents] = useState<Set<string>>(new Set());
   const [studentDirections, setStudentDirections] = useState<Record<string, IsoDirection>>({});
   const [movementNotice, setMovementNotice] = useState("");
+  const [talkPartner, setTalkPartner] = useState("");
   const walkTimers = useRef<Record<string, number>>({});
   const recent = activity.isTest ? [] : interactions.slice(-4);
   const routes = studentMessageRoutes(activity.isTest ? [] : interactions, manifest, selectedStudent).slice(-4);
@@ -229,6 +232,7 @@ export function ClassroomView({
     setManualPositions({});
     setStudentDirections({});
     setMovementNotice("");
+    setTalkPartner("");
     return () => Object.values(walkTimers.current).forEach(window.clearTimeout);
   }, [manifest.run_id]);
 
@@ -278,17 +282,18 @@ export function ClassroomView({
     && activePhase.routes.some((route) =>
       route.allowed && route.source_id === target && route.target_id === selectedStudent && route.channel === "class")
     && (activePhase.architecture !== "supervisor" || activePhase.peer_communication);
-  const peerAvailable = manifest.roster.some((student) => student.student_id !== selectedStudent && permitsPeer(student.student_id));
-  const canTalk = manifest.mode === "live" && !activity.isTest && followingLive && conversationReady
-    && !conversationPending && Boolean(nearbyClassmate && permitsPeer(nearbyClassmate));
+  const partners = manifest.roster.filter((student) => student.student_id !== selectedStudent && permitsPeer(student.student_id));
+  const peerAvailable = partners.length > 0;
+  const targetId = partners.find((student) => student.student_id === talkPartner)?.student_id
+    ?? partners.find((student) => student.student_id === nearbyClassmate)?.student_id ?? partners[0]?.student_id;
+  const canTalk = manifest.mode === "live" && !activity.isTest && conversationReady
+    && !conversationPending && Boolean(targetId);
   const steeringLabel = activity.isTest ? "Steering off · test"
     : conversationPending ? conversationNotice || "Steering queued"
-    : manifest.mode !== "live" ? "Replay · steering off"
-    : !followingLive ? "History · steering off"
+    : manifest.mode !== "live" ? "Saved replay · not live"
     : !peerAvailable ? "Peer steering blocked"
     : !conversationReady ? "Steering waiting"
-    : canTalk ? `Space · Talk to ${resolveAgent(nearbyClassmate!)}`
-    : nearbyClassmate ? "Route blocked"
+    : canTalk ? `Space · Talk to ${resolveAgent(targetId!)}`
     : "Steering ready";
   const taskLabels: Record<string, string> = {
     ask_question: "Teacher question", feedback: "Student report", lecture: "Teacher explanation",
@@ -305,11 +310,11 @@ export function ClassroomView({
       if (target?.closest("input, textarea, select, button, [contenteditable='true']")) return;
       if (event.code !== "Space" || event.repeat) return;
       event.preventDefault();
-      onTalk(activity.isTest ? undefined : nearbyClassmate);
+      if (canTalk) onTalk(targetId);
     };
     window.addEventListener("keydown", talk);
     return () => window.removeEventListener("keydown", talk);
-  }, [manifest.mode, activity.isTest, nearbyClassmate, onTalk]);
+  }, [manifest.mode, canTalk, targetId, onTalk]);
   const moveSelected = (position: {x: number; y: number}) => {
     if (!selectedStudent || activity.isTest) return;
     window.clearTimeout(walkTimers.current[selectedStudent]);
@@ -324,7 +329,7 @@ export function ClassroomView({
       ),
     );
     if (blocked.has(destination)) {
-      setMovementNotice("That tile is occupied. Choose a clear aisle tile.");
+      setMovementNotice("That tile is occupied. Use Talk to, or choose a clear aisle tile.");
       return;
     }
     const path = tilePath(start, destination, blocked).slice(1);
@@ -575,16 +580,29 @@ export function ClassroomView({
         <div className="classroom-taskline" aria-label="Class time and task">
           <time title="Recorded simulation time">{formatTime(activity.time)}</time><strong>{taskLabel}</strong>
           <div className="classroom-commands">
-            <button className={`steering-state ${canTalk ? "ready" : ""}`}
-              disabled={!canTalk} onClick={() => onTalk(nearbyClassmate)}
-              title={peerAvailable ? "Select a student and overlap a classmate's ring to steer their next exchange."
-                : "This mode does not permit a two-way peer conversation."}>{steeringLabel}</button>
+            {onViewTest && <button onClick={onViewTest}>View test</button>}
             {canNextClass ? <button className="next-class-button" onClick={onNextClass} disabled={classStarting}>
-              {classStarting ? "Starting class…" : "Next class"}</button> :
-            <button className="start-test-button" onClick={onStartTest} disabled={!canStartTest || testStarting}
-              title={canStartTest ? "Run the same independent bird test for every student." : "Choose a mode to begin a live lesson first."}>
+              {classStarting ? "Starting class…" : manifest.run_configuration?.runner === "native" ? "Resume live class" : "Next class"}</button> : null}
+            {canStartTest && <button className="start-test-button" onClick={onStartTest} disabled={testStarting}
+              title="Run the same independent bird test for every student.">
               {testStarting ? "Preparing test…" : "Start test"}</button>}
           </div>
+        </div>
+        <div className="steering-controls" aria-label="Conversation steering">
+          {manifest.mode === "live" && !activity.isTest && peerAvailable && <label>
+            {resolveAgent(selectedStudent)} talks to
+            <select aria-label="Conversation partner" value={targetId ?? ""} onChange={(event) => setTalkPartner(event.target.value)}>
+              {partners.map((student) => <option key={student.student_id} value={student.student_id}>{student.display_name}</option>)}
+            </select>
+          </label>}
+          <button className={`steering-state ${canTalk ? "ready" : ""}`}
+            disabled={!canTalk} onClick={() => onTalk(targetId)}
+            title="Queue a policy-permitted exchange at the next native round boundary. Dialogue continues while you steer.">{steeringLabel}</button>
+          <small>{activity.isTest ? "Independent answers only; no peer assistance."
+            : manifest.mode !== "live" ? "Resume live to steer future dialogue; saved conversations stay unchanged."
+            : !peerAvailable ? "This mode does not allow two-way peer exchanges."
+            : !followingLive ? "Viewing earlier dialogue. Steering still goes to the current live class."
+            : "Dialogue keeps going while steering is queued."}</small>
         </div>
         <header className="dialogue-speaker">
           <strong>{activity.testComplete ? "Class complete" : activity.isTest ? "Independent assessment" : dialogue ? resolveAgent(dialogue.payload.speaker_id) : "Classroom"}</strong>

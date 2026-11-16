@@ -2,6 +2,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {ClassroomView} from "./components/ClassroomView";
 import {InsightPanel} from "./components/InsightPanel";
 import {PlaybackControls} from "./components/PlaybackControls";
+import {AssessmentEvidence} from "./components/AssessmentEvidence";
 import {ExperimentToolbar} from "./components/ExperimentToolbar";
 import {ArchitectureKind, ExperimentConfiguration, createPreset} from "./experiment";
 import {classroomActivity, eventsThrough, reconstructStates} from "./replay";
@@ -28,6 +29,8 @@ export default function App() {
   const [modeBusy, setModeBusy] = useState(false);
   const [testStarting, setTestStarting] = useState(false);
   const [classStarting, setClassStarting] = useState(false);
+  const [testPanelOpen, setTestPanelOpen] = useState(false);
+  const [testStudent, setTestStudent] = useState("");
   const conversationInFlight = useRef(false);
   const currentRun = useRef(runId);
   currentRun.current = runId;
@@ -69,6 +72,8 @@ export default function App() {
         setFollowingLive(true);
         setConversationNotice("");
         setConversationRequest(undefined);
+        setTestPanelOpen(nextManifest.run_configuration?.runner === "assessment");
+        setTestStudent("");
         conversationInFlight.current = false;
         setSelectedStudent(nextManifest.roster[0]?.student_id ?? "");
         setSelectedEvent(undefined);
@@ -216,8 +221,8 @@ export default function App() {
   const requestConversation = async (targetId?: string) => {
     if (currentRun.current !== manifest.run_id) return;
     if (conversationInFlight.current) return;
-    if (!followingLive || playhead < events.length - 1) {
-      setConversationNotice("You are viewing history. Use Follow live before steering the current lesson.");
+    if (manifest.mode !== "live") {
+      setConversationNotice("This is saved dialogue. Resume live class to steer future exchanges.");
       return;
     }
     if (manifest.run_configuration?.runner === "assessment" || classroomActivity(events, playhead, String(manifest.teacher.name ?? "Teacher")).isTest) {
@@ -243,7 +248,7 @@ export default function App() {
       if (currentRun.current !== manifest.run_id) return;
       if (!response.ok) throw new Error(body.detail ?? "Conversation request failed");
       setConversationRequest(body.request_id);
-      setConversationNotice("Steering queued");
+      setConversationNotice("Steering queued · dialogue continues");
     } catch (reason) {
       if (currentRun.current !== manifest.run_id) return;
       conversationInFlight.current = false;
@@ -323,6 +328,14 @@ export default function App() {
   const preparingTest = manifest.run_configuration?.runner === "assessment"
     && manifest.run_configuration?.status === "preparing_test" && followingLive;
   const takingTest = manifest.run_configuration?.runner === "assessment" && manifest.mode === "live" && followingLive;
+  const canContinue = manifest.mode === "recorded"
+    && ["complete", "complete_with_errors"].includes(String(manifest.run_configuration?.status))
+    && (manifest.run_configuration?.runner === "native" || manifest.run_configuration?.runner === "assessment"
+      && String(manifest.run_configuration?.source_run_id).startsWith("native-"));
+  const testItems = manifest.assessment_definitions?.[0]?.item_definitions ?? [];
+  const birdCount = testItems.filter((item) => item.task_type === "classification").length;
+  const recallCount = testItems.filter((item) => item.task_type === "recall").length;
+  const testedStudents = new Set(events.filter((event) => event.event_kind === "assessment").map((event) => event.payload.student_id)).size;
   const room = (
     <section className="room-stage">
       <ClassroomView
@@ -339,11 +352,9 @@ export default function App() {
         onStartTest={startTest}
         testStarting={testStarting || preparingTest}
         onNextClass={nextClass}
+        onViewTest={manifest.run_configuration?.runner === "assessment" ? () => setTestPanelOpen(true) : undefined}
         classStarting={classStarting}
-        canNextClass={activity.testComplete && manifest.mode === "recorded"
-          && manifest.run_configuration?.runner === "assessment"
-          && String(manifest.run_configuration?.source_run_id).startsWith("native-")
-          && ["complete", "complete_with_errors"].includes(String(manifest.run_configuration?.status))}
+        canNextClass={canContinue}
         testCompleted={new Set(eventsThrough(events, playhead).filter((event) => event.event_kind === "assessment").map((event) => event.payload.student_id)).size}
         canStartTest={["classroom", "native"].includes(String(manifest.run_configuration?.runner)) && manifest.run_configuration?.execution === "live"}
         onTalk={requestConversation}
@@ -367,15 +378,42 @@ export default function App() {
       />
     </section>
   );
+  const testView = <section className="test-workspace" aria-label="Independent bird test">
+    <header className="test-header">
+      <div><h1>Independent bird test</h1>
+        <p>{manifest.roster.length} students · {birdCount} bird pictures + {recallCount} recall question</p></div>
+      <button onClick={() => setTestPanelOpen(false)}>Back to classroom</button>
+    </header>
+    {manifest.assessment_definitions?.[0]?.assessment_id === "bird-identification-v1" &&
+      <p className="test-version-note">Earlier test version. These saved answers are unchanged; new preset classes use six birds plus recall.</p>}
+    <div className="test-progress" role="status">
+      <strong>{manifest.run_configuration?.status === "failed" ? "Test failed"
+        : manifest.run_configuration?.status === "preparing_test" ? "Waiting for the lesson to finish its current round"
+        : manifest.mode === "live" ? "Students are answering independently" : "Test complete"}</strong>
+      <span>{testedStudents}/{manifest.roster.length} students finished</span>
+      <progress max={manifest.roster.length} value={testedStudents} aria-label="Students tested" />
+      {typeof manifest.run_configuration?.error === "string" && <p>{manifest.run_configuration.error}</p>}
+    </div>
+    <p className="test-instructions">Each student answers from their own retained memory. Recall is scored separately from bird identification. Peer assistance is off during this test.</p>
+    <label className="test-student-filter">Results for<select aria-label="Test student" value={testStudent}
+      onChange={(event) => setTestStudent(event.target.value)}>
+      <option value="">Whole class</option>
+      {manifest.roster.map((student) => <option key={student.student_id} value={student.student_id}>{student.display_name}</option>)}
+    </select></label>
+    <AssessmentEvidence manifest={manifest} events={events} playhead={events.length - 1}
+      studentId={testStudent || undefined} onStudent={setTestStudent} />
+    {canContinue && <button className="next-class-button" onClick={nextClass} disabled={classStarting}>
+      {classStarting ? "Starting class…" : "Next class"}</button>}
+  </section>;
 
   return (
     <main className="game-shell">
       <ExperimentToolbar configuration={configuration} onPreset={applyPreset}
         busy={modeBusy || testStarting || classStarting || manifest.run_configuration?.runner === "assessment" && manifest.mode === "live"} />
-      <div className={`game-workspace ${drawerOpen ? "drawer-is-open" : "drawer-is-closed"}`}>
-        <div className="builder-main room">{room}</div>
+      <div className={`game-workspace ${drawerOpen && !testPanelOpen ? "drawer-is-open" : "drawer-is-closed"}`}>
+        <div className="builder-main room">{testPanelOpen ? testView : room}</div>
 
-        {drawerOpen ? (
+        {testPanelOpen ? null : drawerOpen ? (
           <InsightPanel
             manifest={manifest}
             events={events}
