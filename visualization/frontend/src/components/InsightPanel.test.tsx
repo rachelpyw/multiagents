@@ -25,7 +25,7 @@ const props = {
 
 afterEach(cleanup);
 
-it("keeps bird previews out of class overview and shows results only after a recorded test", () => {
+it("shows bird images and a grade above the breakdown only after a recorded test", () => {
   const lesson: RunManifest = {...manifest, assessment_definitions: [{
     assessment_id: "birds", item_definitions: [
       {item_id: "duck", label: "Mallard", task_type: "classification", image_url: "/duck.svg"},
@@ -50,7 +50,11 @@ it("keeps bird previews out of class overview and shows results only after a rec
     events={events} playhead={1} onStudent={onStudent} />);
   expect(screen.getByRole("heading", {name: "Test results"})).toBeTruthy();
   expect(screen.getByRole("columnheader", {name: "Birds out of 1"})).toBeTruthy();
-  expect(screen.queryByRole("img")).toBeNull();
+  expect(screen.getByRole("img", {name: "Mallard"})).toBeTruthy();
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("50.0%");
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("1/2 students fully scored · Provisional");
+  expect(screen.getByRole("group", {name: "Test birds"}).compareDocumentPosition(
+    screen.getByRole("heading", {name: "Breakdown"})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.click(screen.getByRole("button", {name: "A"}));
   expect(onStudent).toHaveBeenCalledExactlyOnceWith("A");
 });

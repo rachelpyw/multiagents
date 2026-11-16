@@ -36,6 +36,30 @@ afterEach(() => {
 });
 
 describe("classroom live dialogue", () => {
+  it("overlays name tags above furniture and characters while preserving hover, focus, selection, and movement", () => {
+    vi.useFakeTimers();
+    render(<ClassroomView {...props} />);
+    const overlay = document.querySelector(".nameplate-overlay")!;
+    expect(overlay.parentElement?.lastElementChild).toBe(overlay);
+    expect(overlay.getAttribute("pointer-events")).toBe("none");
+    expect(document.querySelector(".teacher-sprite .sprite-nameplate")).toBeNull();
+    expect(overlay.querySelector(".teacher-nameplate")?.textContent).toBe("Teacher");
+    const label = document.querySelector('[data-nameplate-id="A"]')!;
+    const student = screen.getByRole("button", {name: "Select Student A"});
+    fireEvent.mouseEnter(student);
+    expect(label.classList.contains("nameplate-visible")).toBe(true);
+    fireEvent.focus(student);
+    fireEvent.mouseLeave(student);
+    expect(label.classList.contains("nameplate-visible")).toBe(true);
+    fireEvent.blur(student);
+    expect(label.classList.contains("nameplate-visible")).toBe(false);
+    const selected = document.querySelector('[data-nameplate-id="B"]') as SVGGElement;
+    expect(selected.classList.contains("nameplate-visible")).toBe(true);
+    fireEvent.click(document.querySelector('[data-floor-x="428"][data-floor-y="556"]')!);
+    act(() => vi.advanceTimersByTime(6000));
+    expect(selected.style.transform).toBe("translate(428px, 608px)");
+  });
+
   it("shows a larger bubble only on the current speaker, including the teacher", () => {
     const {rerender} = render(<ClassroomView {...props} />);
     expect(document.querySelectorAll(".talking-bubble")).toHaveLength(1);

@@ -1,4 +1,4 @@
-import {buildAnimalEvidence} from "../replay";
+import {buildAnimalEvidence, buildScoreView} from "../replay";
 import {NormalizedEvent, RunManifest} from "../types";
 
 const statusLabels: Record<string, string> = {
@@ -22,10 +22,27 @@ export function AssessmentEvidence({manifest, events, playhead, studentId, onStu
   const items = evidence.assessmentId ? evidence.items : manifest.assessment_definitions?.[0]?.item_definitions ?? [];
   const birds = items.filter((item) => item.task_type === "classification");
   const recall = items.filter((item) => item.task_type === "recall");
+  const scores = buildScoreView(events, playhead, manifest).chartData.at(-1);
+  const grade = studentId ? scores?.[studentId] : scores?.average;
+  const fullyScored = evidence.rows.filter((entry) => typeof scores?.[entry.student.student_id] === "number").length;
   return (
     <section className="drawer-section animal-evidence" aria-label="Animal classification and recall">
       <div className="section-title"><h3>Test results</h3><span>{evidence.checkpoint ?? "waiting"}</span></div>
       {!evidence.assessmentId ? <p className="drawer-empty">No test results yet.</p> : <>
+        <div className="test-overall-grade" role="group" aria-label="Overall grade">
+          <span>Overall grade{!row && " · Class mean"}</span>
+          <strong>{typeof grade === "number" ? `${grade.toFixed(1)}%` : row && !row.record ? "Awaiting result" : "Incomplete"}</strong>
+          <small>{row ? typeof grade === "number" ? "All test items" : "No complete, fully scored test recorded."
+            : `${fullyScored}/${manifest.roster.length} students fully scored${fullyScored < manifest.roster.length ? " · Provisional" : ""}`}</small>
+        </div>
+        {birds.length > 0 && <div className="test-bird-gallery" role="group" aria-label="Test birds">
+          {birds.map((bird) => <figure key={bird.item_id}>
+            {bird.image_url ? <img src={bird.image_url} alt={bird.image_alt ?? bird.label ?? bird.item_id} />
+              : <div className="no-animal-image">No picture recorded</div>}
+            <figcaption>{bird.label ?? bird.item_id}</figcaption>
+          </figure>)}
+        </div>}
+        <h4 className="test-breakdown-title">Breakdown</h4>
         {!row && <p className="animal-counts">{allCorrect}/{tested.length} students identified all {birds.length} birds · {manifest.roster.length - tested.length} awaiting results{unknown ? ` · ${unknown} incomplete` : ""}</p>}
         {!row ? <div className="animal-matrix-scroll">
           <table className="animal-matrix test-summary-table">

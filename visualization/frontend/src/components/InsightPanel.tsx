@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {assessmentsThrough, buildCognitiveOutcome, buildScoreView, eventsThrough, recordedRecipients} from "../replay";
+import {assessmentsThrough, buildCognitiveOutcome, eventsThrough, recordedRecipients} from "../replay";
 import {NormalizedEvent, RunManifest, StudentState} from "../types";
 import {AssessmentEvidence} from "./AssessmentEvidence";
 
@@ -57,8 +57,7 @@ export function InsightPanel(props: Props) {
       || (trail === "tests" && event.event_kind === "assessment")
       || (trail === "steering" && (event.payload.observer_request_id || event.payload.steering_context_ids?.length))));
   const unfiltered = trail === "all" && endpoint === "all" && outcome === "all";
-  const {chartData} = buildScoreView(props.events, props.playhead, props.manifest);
-  const average = chartData.at(-1)?.average;
+  const hasAssessment = assessmentsThrough(props.events, props.playhead).length > 0;
   const cognitive = character !== "all" && character !== teacherId
     ? buildCognitiveOutcome(props.events, props.playhead, character) : undefined;
   const state = props.states[character];
@@ -97,8 +96,8 @@ export function InsightPanel(props: Props) {
     <div className="drawer-scroll">
       {unfiltered && character === "all" && <>
         <div className="class-summary"><span>{props.manifest.roster.length} students</span>
-          <strong>{typeof average === "number" ? `${average.toFixed(1)}% class mean` : "No test yet"}</strong></div>
-        {assessmentsThrough(props.events, props.playhead).length > 0 &&
+          {!hasAssessment && <strong>No test yet</strong>}</div>
+        {hasAssessment &&
           <AssessmentEvidence manifest={props.manifest} events={props.events} playhead={props.playhead} onStudent={props.onStudent} />}
       </>}
       {unfiltered && cognitive && <>

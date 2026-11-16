@@ -5,6 +5,33 @@ import {AssessmentItemDefinition, NormalizedEvent, RunManifest} from "../types";
 
 afterEach(cleanup);
 
+it("shows the class mean or selected student's overall grade without using future results", () => {
+  const manifest: RunManifest = {
+    schema_version: "1.0", run_id: "test", mode: "recorded", label: "Test", upstream_commit: "test",
+    created_at: "2025-09-01T08:00:00", teacher: {}, concept_mapping: {},
+    roster: ["A", "B"].map((id) => ({student_id: id, display_name: id, initials: id, color: "#456", attributes: {}})),
+    assessment_definitions: [{assessment_id: "birds", item_definitions: [
+      {item_id: "duck", label: "Mallard", task_type: "classification", image_url: "/duck.svg"},
+      {item_id: "recall", label: "Bill color", task_type: "recall"},
+    ]}],
+  };
+  const events: NormalizedEvent[] = ["A", "B"].map((id, index) => ({
+    schema_version: "1.0", run_id: "test", event_id: id, sequence: index, event_kind: "assessment",
+    simulation_time: "2025-09-01T08:10:00", student_ids: [id], source_record_refs: [],
+    payload: {student_id: id, assessment_id: "birds", checkpoint: "final", assessment_mode: "independent",
+      expected_count: 2, scorable_count: 2, correct_count: 2 - index, score_percent: index ? 50 : 100,
+      item_results: [{item_id: "duck", status: "correct"}, {item_id: "recall", status: index ? "wrong" : "correct"}]},
+  }));
+  const {rerender} = render(<AssessmentEvidence manifest={manifest} events={events} playhead={1} onStudent={vi.fn()} />);
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("75.0%");
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("2/2 students fully scored");
+  rerender(<AssessmentEvidence manifest={manifest} events={events} playhead={1} studentId="B" onStudent={vi.fn()} />);
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("50.0%");
+  rerender(<AssessmentEvidence manifest={manifest} events={events} playhead={0} studentId="B" onStudent={vi.fn()} />);
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("Awaiting result");
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).not.toContain("%");
+});
+
 it("pictures the misclassified animal without calling an image failure a wrong answer or inventing responses", () => {
   const manifest: RunManifest = {
     schema_version: "1.0", run_id: "test", mode: "synthetic", label: "Test", upstream_commit: "test",
@@ -28,6 +55,7 @@ it("pictures the misclassified animal without calling an image failure a wrong a
   expect(screen.getByText(/No delayed recall test/)).toBeTruthy();
   expect(screen.getByText("Test results")).toBeTruthy();
   expect(screen.queryByText("Animal learning check")).toBeNull();
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("Incomplete");
 });
 
 it("separates six bird identifications from recall in a readable student summary", () => {
@@ -48,7 +76,8 @@ it("separates six bird identifications from recall in a readable student summary
   };
   const onStudent = vi.fn();
   render(<AssessmentEvidence manifest={manifest} events={[event]} playhead={0} onStudent={onStudent} />);
-  expect(screen.queryByRole("img")).toBeNull();
+  expect(screen.getAllByRole("img")).toHaveLength(6);
+  expect(screen.getByRole("group", {name: "Overall grade"}).textContent).toContain("Incomplete");
   expect(screen.getByRole("columnheader", {name: "Birds out of 6"})).toBeTruthy();
   expect(screen.getByRole("columnheader", {name: "Recall out of 1"})).toBeTruthy();
   expect(screen.getByText("5/6")).toBeTruthy();

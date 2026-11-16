@@ -222,6 +222,8 @@ export function ClassroomView({
   const [walkingStudents, setWalkingStudents] = useState<Set<string>>(new Set());
   const [studentDirections, setStudentDirections] = useState<Record<string, IsoDirection>>({});
   const [movementNotice, setMovementNotice] = useState("");
+  const [hoveredStudent, setHoveredStudent] = useState<string>();
+  const [focusedStudent, setFocusedStudent] = useState<string>();
   const walkTimers = useRef<Record<string, number>>({});
   const recent = activity.isTest ? [] : interactions.slice(-4);
   const routes = studentMessageRoutes(activity.isTest ? [] : interactions, manifest, selectedStudent).slice(-4);
@@ -462,10 +464,6 @@ export function ClassroomView({
           data-talk-eligible={eligibleAgents.has(teacherId) || undefined}
         >
           <PixelCharacter color="#774c9d" selected={false} variant={2} direction="se" />
-          <g className="sprite-nameplate teacher-nameplate" transform="translate(0 52)">
-            <rect x="-58" y="-13" width="116" height="24" rx="4" />
-            <text x="0" y="4" textAnchor="middle" className="sprite-name">{teacherId}</text>
-          </g>
           {eligibleAgents.has(teacherId) && <path className="route-eligible-marker" d="M31 37L38 44L31 51L24 44Z" />}
           {speakingId === teacherId && <TalkingBubble kind={dialogue?.payload.interaction_type ?? "other"} />}
         </g>
@@ -547,6 +545,10 @@ export function ClassroomView({
               className={`student-sprite-button action-${action} ${activity.isTest && testStarting ? "preparing" : ""} ${isSpeaker ? "speaking" : ""} ${eligibleAgents.has(student.student_id) ? "talk-eligible" : ""} ${proximityActive.has(student.student_id) ? "proximity-active" : ""} ${walkingStudents.has(student.student_id) ? "walking" : ""}`}
               onClick={() => onStudent(student.student_id)}
               onKeyDown={(event) => event.key === "Enter" && onStudent(student.student_id)}
+              onMouseEnter={() => setHoveredStudent(student.student_id)}
+              onMouseLeave={() => setHoveredStudent(undefined)}
+              onFocus={() => setFocusedStudent(student.student_id)}
+              onBlur={() => setFocusedStudent(undefined)}
               tabIndex={0}
               role="button"
               aria-label={`Select ${student.display_name}`}
@@ -574,10 +576,6 @@ export function ClassroomView({
                 variant={manifest.roster.indexOf(student)}
                 direction={direction}
               />
-              <g className="sprite-nameplate" transform="translate(0 52)">
-                <rect x="-52" y="-13" width="104" height="24" rx="4" fill="#d9edff" stroke="#17243b" strokeWidth="3" />
-                <text x="0" y="4" textAnchor="middle" className="sprite-name">{student.display_name}</text>
-              </g>
               {activity.isTest && <g className="test-paper" transform="translate(-9 -3)">
                 <path d="M-10 0L12 -7L23 1L0 9Z" fill="#fffbed" stroke="#51483e" strokeWidth="2" />
                 <path className="test-pencil" d="M3 0L16 -9" stroke="#b57f36" strokeWidth="3" />
@@ -605,6 +603,28 @@ export function ClassroomView({
           <path d="M-7 17L0 24L7 17" />
           <text y="4" textAnchor="middle">[space] to talk</text>
         </g>}
+        <g className="nameplate-overlay" pointerEvents="none">
+          <g className={speakingId === teacherId ? "speaking" : ""}
+            transform={`translate(${teacherPosition.x} ${teacherPosition.y + 52})`}>
+            <g className="sprite-nameplate teacher-nameplate">
+              <rect x="-58" y="-13" width="116" height="24" rx="4" />
+              <text x="0" y="4" textAnchor="middle" className="sprite-name">{teacherId}</text>
+            </g>
+          </g>
+          {manifest.roster.map((student) => {
+            const position = studentPositions[student.student_id];
+            const visible = selectedStudent === student.student_id || hoveredStudent === student.student_id
+              || focusedStudent === student.student_id;
+            return <g key={student.student_id} data-nameplate-id={student.student_id}
+              className={`nameplate-anchor ${visible ? "nameplate-visible" : ""} ${speakingId === student.student_id ? "speaking" : ""}`}
+              style={{transform: `translate(${position.x}px, ${position.y + 52}px)`}}>
+              <g className="sprite-nameplate">
+                <rect x="-52" y="-13" width="104" height="24" rx="4" />
+                <text x="0" y="4" textAnchor="middle" className="sprite-name">{student.display_name}</text>
+              </g>
+            </g>;
+          })}
+        </g>
       </svg>
       <section className="game-dialogue" aria-label="Classroom dialogue" aria-live="polite">
         <div className="classroom-taskline" aria-label="Class time and task">
