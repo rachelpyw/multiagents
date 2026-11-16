@@ -41,6 +41,12 @@ Open <http://localhost:5173>. The room opens the newest saved run. With no saved
 
 On this machine the frontend is served at <http://localhost:5174> (5173 is occupied).
 
+### Vercel frontend deployment
+
+Import the repository with its root directory left at `.`. The root `vercel.json` installs and builds `visualization/frontend` and publishes only its `dist` output. Without these explicit paths, Vercel's **Other** preset publishes the repository root without building the app and `/` returns 404.
+
+This deploys the frontend, not the native Python simulation. The Vite `/api` proxy exists only during local development. Production must route `/api/*` to a separately hosted FastAPI backend with persistent run storage and long-running native workers. A successful static deployment alone does not make live classes available; missing API requests remain explicit errors, not synthetic replacements. Never put `SCHOOLAGENT_API_KEY` in frontend environment variables or build output.
+
 ### Mode dropdown and live classroom
 
 The compact **Mode** menu offers **Teacher-led / Supervisor**, **Sequential / Relay**, **Peer network**, and **Shared blackboard**. Switching starts a new saved session, preserving earlier recordings:

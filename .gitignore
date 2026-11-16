@@ -55,6 +55,7 @@ venv/
 # IDE project files
 .vscode/
 .idea/
+.vercel/
 
 # Build artifacts
 dist/

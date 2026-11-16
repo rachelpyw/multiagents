@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm --prefix visualization/frontend ci",
+  "buildCommand": "npm --prefix visualization/frontend run build",
+  "outputDirectory": "visualization/frontend/dist"
+}
