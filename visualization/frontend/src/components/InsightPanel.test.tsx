@@ -25,6 +25,36 @@ const props = {
 
 afterEach(cleanup);
 
+it("keeps bird previews out of class overview and shows results only after a recorded test", () => {
+  const lesson: RunManifest = {...manifest, assessment_definitions: [{
+    assessment_id: "birds", item_definitions: [
+      {item_id: "duck", label: "Mallard", task_type: "classification", image_url: "/duck.svg"},
+      {item_id: "recall", label: "Bill color", task_type: "recall"},
+    ],
+  }]};
+  const events = [
+    nativeEvent("0", "A", "plan", "Lesson in progress"),
+    event("1", "A", {student_id: "A", assessment_id: "birds", checkpoint: "final", assessment_mode: "independent",
+      score_percent: 50, correct_count: 1, scorable_count: 2, expected_count: 2, item_results: [
+        {item_id: "duck", status: "correct", response: "Mallard"},
+        {item_id: "recall", status: "wrong", response: "Blue"},
+      ]}, "assessment"),
+  ];
+  const onStudent = vi.fn();
+  const {rerender} = render(<InsightPanel {...props} manifest={lesson} mode="overview"
+    events={events} playhead={0} onStudent={onStudent} />);
+  expect(screen.getByText("No test yet")).toBeTruthy();
+  expect(screen.queryByRole("heading", {name: "Test results"})).toBeNull();
+  expect(screen.queryByRole("img")).toBeNull();
+  rerender(<InsightPanel {...props} manifest={lesson} mode="overview"
+    events={events} playhead={1} onStudent={onStudent} />);
+  expect(screen.getByRole("heading", {name: "Test results"})).toBeTruthy();
+  expect(screen.getByRole("columnheader", {name: "Birds out of 1"})).toBeTruthy();
+  expect(screen.queryByRole("img")).toBeNull();
+  fireEvent.click(screen.getByRole("button", {name: "A"}));
+  expect(onStudent).toHaveBeenCalledExactlyOnceWith("A");
+});
+
 it("composes character, trail, and endpoint filters without showing future records", () => {
   const events = [
     nativeEvent("0", "A", "perceive", "A perceived the lesson"),

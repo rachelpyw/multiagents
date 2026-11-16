@@ -408,7 +408,7 @@ export default function App() {
       {manifest.roster.map((student) => <option key={student.student_id} value={student.student_id}>{student.display_name}</option>)}
     </select></label>
     <AssessmentEvidence manifest={manifest} events={events} playhead={events.length - 1}
-      studentId={testStudent || undefined} onStudent={setTestStudent} />
+      studentId={testStudent || undefined} showBirdPreview onStudent={setTestStudent} />
     {canContinue && <button className="next-class-button" onClick={nextClass} disabled={classStarting}>
       {classStarting ? "Starting class…" : "Next class"}</button>}
   </section>;

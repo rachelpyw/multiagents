@@ -47,7 +47,7 @@ it("separates six bird identifications from recall in a readable student summary
       item_results: items.map((item, index) => ({item_id: item.item_id, status: index === 5 ? "error" : "correct"}))},
   };
   const onStudent = vi.fn();
-  render(<AssessmentEvidence manifest={manifest} events={[event]} playhead={0} onStudent={onStudent} />);
+  render(<AssessmentEvidence manifest={manifest} events={[event]} playhead={0} showBirdPreview onStudent={onStudent} />);
   expect(screen.getAllByRole("img")).toHaveLength(6);
   expect(screen.getByRole("columnheader", {name: "Birds out of 6"})).toBeTruthy();
   expect(screen.getByRole("columnheader", {name: "Recall out of 1"})).toBeTruthy();

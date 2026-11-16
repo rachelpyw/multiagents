@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {buildCognitiveOutcome, buildScoreView, eventsThrough, recordedRecipients} from "../replay";
+import {assessmentsThrough, buildCognitiveOutcome, buildScoreView, eventsThrough, recordedRecipients} from "../replay";
 import {NormalizedEvent, RunManifest, StudentState} from "../types";
 import {AssessmentEvidence} from "./AssessmentEvidence";
 
@@ -98,7 +98,8 @@ export function InsightPanel(props: Props) {
       {unfiltered && character === "all" && <>
         <div className="class-summary"><span>{props.manifest.roster.length} students</span>
           <strong>{typeof average === "number" ? `${average.toFixed(1)}% class mean` : "No test yet"}</strong></div>
-        <AssessmentEvidence manifest={props.manifest} events={props.events} playhead={props.playhead} onStudent={props.onStudent} />
+        {assessmentsThrough(props.events, props.playhead).length > 0 &&
+          <AssessmentEvidence manifest={props.manifest} events={props.events} playhead={props.playhead} onStudent={props.onStudent} />}
       </>}
       {unfiltered && cognitive && <>
         <AssessmentEvidence manifest={props.manifest} events={props.events} playhead={props.playhead}

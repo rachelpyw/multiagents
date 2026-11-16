@@ -10,10 +10,11 @@ interface Props {
   events: NormalizedEvent[];
   playhead: number;
   studentId?: string;
+  showBirdPreview?: boolean;
   onStudent: (id: string) => void;
 }
 
-export function AssessmentEvidence({manifest, events, playhead, studentId, onStudent}: Props) {
+export function AssessmentEvidence({manifest, events, playhead, studentId, showBirdPreview = false, onStudent}: Props) {
   const evidence = buildAnimalEvidence(events, playhead, manifest);
   const row = evidence.rows.find((row) => row.student.student_id === studentId);
   const tested = evidence.rows.filter((row) => row.record);
@@ -25,7 +26,7 @@ export function AssessmentEvidence({manifest, events, playhead, studentId, onStu
   return (
     <section className="drawer-section animal-evidence" aria-label="Animal classification and recall">
       <div className="section-title"><h3>Test results</h3><span>{evidence.checkpoint ?? "waiting"}</span></div>
-      {!row && <div className="bird-test-grid" aria-label="Bird identification pictures">
+      {!row && showBirdPreview && <div className="bird-test-grid" aria-label="Bird identification pictures">
         {birds.map((item) => <figure key={item.item_id}>
           {item.image_url && <img src={item.image_url} alt={item.image_alt ?? item.label ?? item.item_id} />}
           <figcaption>{item.label ?? item.item_id}</figcaption>
