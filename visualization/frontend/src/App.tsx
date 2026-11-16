@@ -223,7 +223,7 @@ export default function App() {
     if (currentRun.current !== manifest.run_id) return;
     if (conversationInFlight.current) return;
     if (manifest.mode !== "live") {
-      setConversationNotice("This is saved dialogue. Resume live class to steer future exchanges.");
+      setConversationNotice("Resume live");
       return;
     }
     if (manifest.run_configuration?.runner === "assessment" || classroomActivity(events, playhead, String(manifest.teacher.name ?? "Teacher")).isTest) {

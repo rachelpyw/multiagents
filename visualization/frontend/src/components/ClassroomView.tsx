@@ -583,7 +583,7 @@ export function ClassroomView({
           <div className="classroom-commands">
             {onViewTest && <button onClick={onViewTest}>View test</button>}
             {canNextClass ? <button className="next-class-button" onClick={onNextClass} disabled={classStarting}>
-              {classStarting ? "Starting class…" : manifest.run_configuration?.runner === "native" ? "Resume live class" : "Next class"}</button> : null}
+              {classStarting ? "Starting class…" : manifest.run_configuration?.runner === "native" ? "Resume live" : "Next class"}</button> : null}
             {canStartTest && <button className="start-test-button" onClick={onStartTest} disabled={testStarting}
               title="Run the same independent bird test for every student.">
               {testStarting ? "Preparing test…" : "Start test"}</button>}
