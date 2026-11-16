@@ -22,6 +22,33 @@ export function eventsThrough(events: NormalizedEvent[], playhead: number): Norm
   return events.slice(0, Math.max(0, playhead + 1));
 }
 
+export function lessonPictures(interactions: NormalizedEvent[], manifest: RunManifest, dialogue?: NormalizedEvent) {
+  const normalize = (text: string) => ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const items = (manifest.assessment_definitions ?? []).flatMap((definition) => definition.item_definitions ?? [])
+    .filter((item): item is AssessmentItemDefinition & {image_url: string} =>
+      item.task_type === "classification" && typeof item.image_url === "string");
+  const index = interactions.findIndex((event) => event.event_id === dialogue?.event_id);
+  for (const event of interactions.slice(0, index + 1).reverse()) {
+    if (typeof event.payload.lesson_image_url === "string") {
+      return [{image_url: event.payload.lesson_image_url,
+        image_alt: String(event.payload.lesson_image_alt ?? "Lesson illustration"), label: ""}];
+    }
+    const text = normalize(String(event.payload.content ?? ""));
+    const matching = items.filter((item) => {
+      const names = [item.label, ...(item.answer_aliases ?? []), item.label?.split(/\s+/).at(-1)];
+      return names.some((name) => name && [name, `${name}s`, name.replace(/goose$/i, "geese")]
+        .some((variant) => text.includes(normalize(variant))));
+    });
+    if (matching.length) {
+      return [...new Map(matching.map((item) => [item.image_url, {
+        image_url: item.image_url, image_alt: item.image_alt ?? item.label ?? "Lesson bird illustration",
+        label: item.label ?? "",
+      }])).values()];
+    }
+  }
+  return [];
+}
+
 export function recordedRecipients(event: NormalizedEvent, manifest: RunManifest): string[] {
   const knownIds = new Set([
     String(manifest.teacher.name ?? "Teacher"),

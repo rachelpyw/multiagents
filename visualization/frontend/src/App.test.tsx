@@ -136,7 +136,7 @@ it("starts a separate mode session and retains its mode after loading the new re
   expect(screen.getByRole("region", {name: "Classroom dialogue"})).toBeTruthy();
 });
 
-it("opens a dedicated test view with real incoming progress and keeps the seated classroom accessible", async () => {
+it("keeps all six students writing in the classroom and streams results into the sidebar", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   const lesson: RunManifest = {
     schema_version: "1.0", run_id: "lesson", mode: "recorded", label: "Lesson", concept_mapping: {},
@@ -177,17 +177,23 @@ it("opens a dedicated test view with real incoming progress and keeps the seated
   render(<App />);
   fireEvent.click(await screen.findByRole("button", {name: "Start test"}));
   await waitFor(() => expect(post).toHaveBeenCalledWith("/api/runs/lesson/tests"));
-  await screen.findByRole("region", {name: "Independent bird test"});
-  expect(screen.getByText("0/6 students finished")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", {name: "Back to classroom"}));
   await waitFor(() => expect(document.querySelectorAll("[data-desk-id]")).toHaveLength(6));
   expect(new Set([...document.querySelectorAll("[data-desk-id]")].map((element) => (element as SVGElement).style.transform)).size).toBe(6);
+  await screen.findByRole("status", {name: "Students working on the test"});
+  expect(document.querySelectorAll(".test-pencil")).toHaveLength(6);
+  expect(document.querySelectorAll(".game-dialogue .writing-pencil")).toHaveLength(6);
+  expect(screen.getByText("0/6 student results received.")).toBeTruthy();
+  expect(screen.queryByRole("region", {name: "Independent bird test"})).toBeNull();
+  expect(screen.queryByRole("button", {name: "View test"})).toBeNull();
   expect(screen.queryByText("[space] to talk")).toBeNull();
-  fireEvent.click(screen.getByRole("button", {name: "View test"}));
   act(() => stream?.onmessage?.({data: JSON.stringify(result)}));
-  await waitFor(() => expect(screen.getByText("1/6 students finished")).toBeTruthy());
+  await screen.findByText("1/6 student results received.");
+  expect(screen.getByRole("complementary", {name: "Class and student insights"}).textContent).toContain("Test results");
   completed = true;
-  await waitFor(() => expect(screen.getByText("6/6 students finished")).toBeTruthy(), {timeout: 2500});
+  await screen.findByText("Results saved. Ready for the next class.", {}, {timeout: 2500});
+  expect(document.querySelectorAll(".test-pencil, .writing-pencil, [data-desk-id]")).toHaveLength(0);
+  expect(screen.getAllByRole("button", {name: /^Select [A-F]$/})).toHaveLength(6);
+  expect(screen.getByRole("complementary", {name: "Class and student insights"}).textContent).toContain("6/6 students identified");
 });
 
 it("defaults to the classroom even when the latest run is an assessment, and leaves results for the next class", async () => {
@@ -207,8 +213,7 @@ it("defaults to the classroom even when the latest run is an assessment, and lea
   render(<App />);
   await screen.findByRole("region", {name: "Classroom dialogue"});
   expect(screen.queryByRole("region", {name: "Independent bird test"})).toBeNull();
-  fireEvent.click(screen.getByRole("button", {name: "View test"}));
-  await screen.findByRole("region", {name: "Independent bird test"});
+  expect(screen.queryByRole("button", {name: "View test"})).toBeNull();
   fireEvent.click(screen.getByRole("button", {name: "Next class"}));
   await screen.findByRole("region", {name: "Classroom dialogue"});
   expect(screen.queryByRole("region", {name: "Independent bird test"})).toBeNull();

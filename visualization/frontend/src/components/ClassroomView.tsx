@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 import {LessonPhase} from "../experiment";
-import {classroomActivity, recordedRecipients, studentMessageRoutes} from "../replay";
+import {classroomActivity, lessonPictures, recordedRecipients, studentMessageRoutes} from "../replay";
 import {NormalizedEvent, RunManifest} from "../types";
 
 const interactionStyles = {
@@ -93,7 +93,6 @@ interface Props {
   testStarting: boolean;
   testCompleted: number;
   onNextClass: () => void;
-  onViewTest?: () => void;
   canNextClass: boolean;
   classStarting: boolean;
   followingLive: boolean;
@@ -176,6 +175,15 @@ function PixelCharacter({
   );
 }
 
+function TalkingBubble({kind}: {kind: string}) {
+  const symbol = kind === "question" ? "?" : kind === "help_request" ? "!" : undefined;
+  return <g className="talking-bubble" transform="translate(52 -64)" role="img" aria-label={symbol === "?" ? "Asking a question" : symbol === "!" ? "Asking for help" : "Speaking"}>
+    <path d="M-28-20H28Q34-20 34-14V14Q34 20 28 20H-13L-27 31V20H-28Q-34 20-34 14V-14Q-34-20-28-20Z" />
+    {symbol ? <text y="9" textAnchor="middle">{symbol}</text>
+      : <g className="talking-dots"><circle cx="-15" r="4" /><circle r="4" /><circle cx="15" r="4" /></g>}
+  </g>;
+}
+
 export function ClassroomView({
   manifest,
   interactions,
@@ -191,7 +199,6 @@ export function ClassroomView({
   testStarting,
   testCompleted,
   onNextClass,
-  onViewTest,
   canNextClass,
   classStarting,
   followingLive,
@@ -213,9 +220,13 @@ export function ClassroomView({
   const routes = studentMessageRoutes(activity.isTest ? [] : interactions, manifest, selectedStudent).slice(-4);
   const latest = interactions.at(-1);
   const dialogue = interactions.find((event) => event.event_id === selectedEvent) ?? latest;
-  const speakingId = !activity.isTest && !activity.testComplete ? dialogue?.payload.speaker_id : undefined;
+  const testFailed = manifest.run_configuration?.runner === "assessment"
+    && manifest.run_configuration?.status === "failed" && followingLive;
+  const speakingId = !activity.isTest && !activity.testComplete && !testFailed ? dialogue?.payload.speaker_id : undefined;
   const latestTeacherInteraction = !activity.isTest && latest?.payload.speaker_id === teacherId ? latest : undefined;
-  const lessonMedia = [...interactions].reverse().find((event) => event.payload.lesson_image_url);
+  const pictures = activity.isTest || activity.testComplete || testFailed ? [] : lessonPictures(interactions, manifest, dialogue);
+  const boardColumns = Math.min(3, Math.max(1, pictures.length));
+  const boardRows = Math.ceil(pictures.length / boardColumns);
   const eligibleAgents = new Set(activity.isTest ? [] :
     activePhase.routes
       .filter((route) => route.allowed && route.source_id === selectedStudent)
@@ -287,7 +298,7 @@ export function ClassroomView({
     pipeline_handoff: "Passing evidence card", group_discussion: "Peer discussion",
     blackboard_write: "Board contribution", blackboard_review: "Teacher review",
   };
-  const taskLabel = activity.isTest || activity.testComplete ? activity.task
+  const taskLabel = activity.isTest || activity.testComplete || testFailed ? activity.task
     : taskLabels[dialogue?.payload.active_event ?? ""] ?? "Class discussion";
 
   useEffect(() => {
@@ -404,9 +415,21 @@ export function ClassroomView({
           ))}
         </defs>
         <image href="/classroom-background.jpeg" width="1366" height="768" aria-label="Furnished pixel classroom" />
-        {lessonMedia && <image href={lessonMedia.payload.lesson_image_url}
-          x="160" y="200" width="140" height="90" transform="matrix(1 -.5 0 1 0 20)"
-          preserveAspectRatio="xMidYMid meet"><title>{lessonMedia.payload.lesson_image_alt}</title></image>}
+        {pictures.length > 0 && <g className="lesson-board" transform="matrix(1 -.5 0 1 0 0)"
+          role="group" aria-label="Lesson bird illustrations">
+          <rect x="88" y="194" width="278" height="132" rx="3" fill="#304e3f" />
+          {pictures.map((picture, index) => {
+            const width = 266 / boardColumns;
+            const height = 120 / boardRows;
+            const x = 94 + (index % boardColumns) * width;
+            const y = 200 + Math.floor(index / boardColumns) * height;
+            return <g key={picture.image_url}>
+              <image href={picture.image_url} x={x + 3} y={y} width={width - 6} height={height - 17}
+                role="img" aria-label={picture.image_alt} preserveAspectRatio="xMidYMid meet" />
+              <text x={x + width / 2} y={y + height - 4} textAnchor="middle">{picture.label}</text>
+            </g>;
+          })}
+        </g>}
 
         <g className={`movement-grid ${selectedStudent ? "active" : ""}`} aria-label="Walkable floor tiles">
           {movementTiles.map((tile, index) => (
@@ -438,10 +461,7 @@ export function ClassroomView({
             <text x="0" y="4" textAnchor="middle" className="sprite-name">{teacherId}</text>
           </g>
           {eligibleAgents.has(teacherId) && <path className="route-eligible-marker" d="M31 37L38 44L31 51L24 44Z" />}
-          {latestTeacherInteraction && <g className="action-badge" transform="translate(31 -47)">
-            <rect x="-9" y="-10" width="20" height="20" fill={interactionStyles[latestTeacherInteraction.payload.interaction_type as keyof typeof interactionStyles]?.stroke ?? "#fff"} stroke="#17243b" strokeWidth="3" />
-            <text x="1" y="5" textAnchor="middle">{latestTeacherInteraction.payload.interaction_type === "question" ? "?" : "●"}</text>
-          </g>}
+          {speakingId === teacherId && <TalkingBubble kind={dialogue?.payload.interaction_type ?? "other"} />}
         </g>
         <image href="/classroom-background.jpeg" width="1366" height="768" clipPath="url(#teacher-desk-front)" pointerEvents="none" />
 
@@ -555,7 +575,8 @@ export function ClassroomView({
                 <path d="M-10 0L12 -7L23 1L0 9Z" fill="#fffbed" stroke="#51483e" strokeWidth="2" />
                 <path className="test-pencil" d="M3 0L16 -9" stroke="#b57f36" strokeWidth="3" />
               </g>}
-              {active && !activity.isTest && <g className="action-badge" transform="translate(31 -47)">
+              {isSpeaker && <TalkingBubble kind={dialogue?.payload.interaction_type ?? "other"} />}
+              {active && !activity.isTest && !isSpeaker && <g className="action-badge" transform="translate(31 -47)">
                 <rect x="-9" y="-10" width="20" height="20" fill={interactionStyles[active.payload.interaction_type as keyof typeof interactionStyles]?.stroke ?? "#fff"} stroke="#17243b" strokeWidth="3" />
                 <text x="1" y="5" textAnchor="middle">{badge}</text>
               </g>}
@@ -581,7 +602,6 @@ export function ClassroomView({
         <div className="classroom-taskline" aria-label="Class time and task">
           <time title="Recorded simulation time">{formatTime(activity.time)}</time><strong>{taskLabel}</strong>
           <div className="classroom-commands">
-            {onViewTest && <button onClick={onViewTest}>View test</button>}
             {canNextClass ? <button className="next-class-button" onClick={onNextClass} disabled={classStarting}>
               {classStarting ? "Starting class…" : manifest.run_configuration?.runner === "native" ? "Resume live" : "Next class"}</button> : null}
             {canStartTest && <button className="start-test-button" onClick={onStartTest} disabled={testStarting}
@@ -590,7 +610,7 @@ export function ClassroomView({
           </div>
         </div>
         <header className="dialogue-speaker">
-          <strong>{activity.testComplete ? "Class complete" : activity.isTest ? "Independent assessment" : dialogue ? resolveAgent(dialogue.payload.speaker_id) : "Classroom"}</strong>
+          <strong>{testFailed ? "Test failed" : activity.testComplete ? "Class complete" : activity.isTest ? "Independent assessment" : dialogue ? resolveAgent(dialogue.payload.speaker_id) : "Classroom"}</strong>
           {steeringState && <span className="steering-status" role="status">
             Steering…{steeringState === "complete" && <svg viewBox="0 0 16 16" role="img" aria-label="Complete">
               <path d="M3 8l3 3 7-7" />
@@ -599,7 +619,19 @@ export function ClassroomView({
           {manifest.mode === "live" && !followingLive && <button onClick={onFollowLive}>Follow live</button>}
           {(conversationNotice || movementNotice) && <span className="steering-feedback" role="status">{conversationNotice || movementNotice}</span>}
         </header>
-        <p>{activity.testComplete ? "Results saved. Ready for the next class." : activity.isTest ? testStarting ? "Students are taking their seats."
+        {activity.isTest && <div className={`test-writing ${testStarting ? "preparing" : ""}`} role="status"
+          aria-label={testStarting ? "Students preparing for the test" : "Students working on the test"}>
+          {manifest.roster.map((student) => <span key={student.student_id} className="writing-student">
+            <svg className="writing-pencil" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M4 13L13 4L17 8L8 17L3 18Z" fill="#dfcf82" />
+              <path d="M13 4L15 2L19 6L17 8Z" fill="#bd846f" />
+              <path d="M3 18L4 13L8 17Z" fill="#edf0e3" />
+              <path d="M1 19H12" stroke="currentColor" />
+            </svg>{student.display_name}
+          </span>)}
+        </div>}
+        <p>{testFailed ? "Test stopped. Completed answers are in the sidebar."
+          : activity.testComplete ? "Results saved. Ready for the next class." : activity.isTest ? testStarting ? "Students are taking their seats."
           : `${testCompleted}/${manifest.roster.length} student results received.`
           : dialogue?.payload.content ?? "Waiting for the lesson…"}</p>
       </section>

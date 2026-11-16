@@ -2,7 +2,6 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {ClassroomView} from "./components/ClassroomView";
 import {InsightPanel} from "./components/InsightPanel";
 import {PlaybackControls} from "./components/PlaybackControls";
-import {AssessmentEvidence} from "./components/AssessmentEvidence";
 import {ExperimentToolbar} from "./components/ExperimentToolbar";
 import {ArchitectureKind, ExperimentConfiguration, createPreset} from "./experiment";
 import {classroomActivity, eventsThrough, reconstructStates} from "./replay";
@@ -30,8 +29,6 @@ export default function App() {
   const [modeBusy, setModeBusy] = useState(false);
   const [testStarting, setTestStarting] = useState(false);
   const [classStarting, setClassStarting] = useState(false);
-  const [testPanelOpen, setTestPanelOpen] = useState(false);
-  const [testStudent, setTestStudent] = useState("");
   const conversationInFlight = useRef(false);
   const currentRun = useRef(runId);
   currentRun.current = runId;
@@ -74,7 +71,6 @@ export default function App() {
         setConversationNotice("");
         setConversationRequest(undefined);
         setSteeringState(undefined);
-        setTestStudent("");
         conversationInFlight.current = false;
         setSelectedStudent(nextManifest.roster[0]?.student_id ?? "");
         setSelectedEvent(undefined);
@@ -276,7 +272,6 @@ export default function App() {
       if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Unable to start classroom.");
       if (currentRun.current !== sourceRun) return;
       const next = body as RunManifest;
-      setTestPanelOpen(false);
       setRunId(next.run_id);
     } catch (reason) {
       setConversationNotice(String(reason));
@@ -303,7 +298,6 @@ export default function App() {
       if (!response.ok) throw new Error(body.detail ?? "Unable to start test");
       if (currentRun.current !== sourceRun) return;
       setFollowingLive(true);
-      setTestPanelOpen(true);
       setRunId((body as RunManifest).run_id);
       setDrawerMode("overview");
       setDrawerOpen(true);
@@ -322,7 +316,6 @@ export default function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail ?? "Unable to start the next class");
       if (currentRun.current === sourceRun) {
-        setTestPanelOpen(false);
         setRunId((body as RunManifest).run_id);
       }
     } catch (reason) {
@@ -335,31 +328,34 @@ export default function App() {
   const preparingTest = manifest.run_configuration?.runner === "assessment"
     && manifest.run_configuration?.status === "preparing_test" && followingLive;
   const takingTest = manifest.run_configuration?.runner === "assessment" && manifest.mode === "live" && followingLive;
+  const testComplete = manifest.run_configuration?.runner === "assessment" && manifest.mode === "recorded"
+    && ["complete", "complete_with_errors"].includes(String(manifest.run_configuration?.status));
+  const testFailed = manifest.run_configuration?.runner === "assessment" && manifest.run_configuration?.status === "failed";
+  const roomActivity = manifest.run_configuration?.runner === "assessment" && followingLive
+    ? {...activity, isTest: takingTest, testComplete,
+      task: testFailed ? "Test failed" : testComplete ? "Test complete"
+        : preparingTest ? "Preparing independent test" : "Independent test"}
+    : activity;
   const canContinue = manifest.mode === "recorded"
     && ["complete", "complete_with_errors"].includes(String(manifest.run_configuration?.status))
     && (manifest.run_configuration?.runner === "native" || manifest.run_configuration?.runner === "assessment"
       && String(manifest.run_configuration?.source_run_id).startsWith("native-"));
-  const testItems = manifest.assessment_definitions?.[0]?.item_definitions ?? [];
-  const birdCount = testItems.filter((item) => item.task_type === "classification").length;
-  const recallCount = testItems.filter((item) => item.task_type === "recall").length;
-  const testedStudents = new Set(events.filter((event) => event.event_kind === "assessment").map((event) => event.payload.student_id)).size;
   const room = (
     <section className="room-stage">
       <ClassroomView
         manifest={manifest}
         interactions={interactions}
-        activity={takingTest ? {...activity, isTest: true,
-          task: preparingTest ? "Preparing independent test" : activity.isTest ? activity.task : "Independent test"} : activity}
+        activity={roomActivity}
         activePhase={configuration.phases[0]}
         selectedStudent={selectedStudent}
         selectedEvent={selectedEvent}
-        conversationNotice={conversationNotice}
+        conversationNotice={conversationNotice || (testFailed && followingLive
+          ? String(manifest.run_configuration?.error ?? "Test failed. Completed answers remain in the sidebar.") : "")}
         conversationReady={conversationReady}
         steeringState={steeringState}
         onStartTest={startTest}
         testStarting={testStarting || preparingTest}
         onNextClass={nextClass}
-        onViewTest={manifest.run_configuration?.runner === "assessment" ? () => setTestPanelOpen(true) : undefined}
         classStarting={classStarting}
         canNextClass={canContinue}
         testCompleted={new Set(eventsThrough(events, playhead).filter((event) => event.event_kind === "assessment").map((event) => event.payload.student_id)).size}
@@ -385,42 +381,14 @@ export default function App() {
       />
     </section>
   );
-  const testView = <section className="test-workspace" aria-label="Independent bird test">
-    <header className="test-header">
-      <div><h1>Independent bird test</h1>
-        <p>{manifest.roster.length} students · {birdCount} bird pictures + {recallCount} recall question</p></div>
-      <button onClick={() => setTestPanelOpen(false)}>Back to classroom</button>
-    </header>
-    {manifest.assessment_definitions?.[0]?.assessment_id === "bird-identification-v1" &&
-      <p className="test-version-note">Earlier test version. These saved answers are unchanged; new preset classes use six birds plus recall.</p>}
-    <div className="test-progress" role="status">
-      <strong>{manifest.run_configuration?.status === "failed" ? "Test failed"
-        : manifest.run_configuration?.status === "preparing_test" ? "Waiting for the lesson to finish its current round"
-        : manifest.mode === "live" ? "Students are answering independently" : "Test complete"}</strong>
-      <span>{testedStudents}/{manifest.roster.length} students finished</span>
-      <progress max={manifest.roster.length} value={testedStudents} aria-label="Students tested" />
-      {typeof manifest.run_configuration?.error === "string" && <p>{manifest.run_configuration.error}</p>}
-    </div>
-    <p className="test-instructions">Each student answers from their own retained memory. Recall is scored separately from bird identification. Peer assistance is off during this test.</p>
-    <label className="test-student-filter">Results for<select aria-label="Test student" value={testStudent}
-      onChange={(event) => setTestStudent(event.target.value)}>
-      <option value="">Whole class</option>
-      {manifest.roster.map((student) => <option key={student.student_id} value={student.student_id}>{student.display_name}</option>)}
-    </select></label>
-    <AssessmentEvidence manifest={manifest} events={events} playhead={events.length - 1}
-      studentId={testStudent || undefined} showBirdPreview onStudent={setTestStudent} />
-    {canContinue && <button className="next-class-button" onClick={nextClass} disabled={classStarting}>
-      {classStarting ? "Starting class…" : "Next class"}</button>}
-  </section>;
-
   return (
     <main className="game-shell">
       <ExperimentToolbar configuration={configuration} onPreset={applyPreset}
         busy={modeBusy || testStarting || classStarting || manifest.run_configuration?.runner === "assessment" && manifest.mode === "live"} />
-      <div className={`game-workspace ${drawerOpen && !testPanelOpen ? "drawer-is-open" : "drawer-is-closed"}`}>
-        <div className="builder-main room">{testPanelOpen ? testView : room}</div>
+      <div className={`game-workspace ${drawerOpen ? "drawer-is-open" : "drawer-is-closed"}`}>
+        <div className="builder-main room">{room}</div>
 
-        {testPanelOpen ? null : drawerOpen ? (
+        {drawerOpen ? (
           <InsightPanel
             manifest={manifest}
             events={events}

@@ -36,6 +36,47 @@ afterEach(() => {
 });
 
 describe("classroom live dialogue", () => {
+  it("shows a larger bubble only on the current speaker, including the teacher", () => {
+    const {rerender} = render(<ClassroomView {...props} />);
+    expect(document.querySelectorAll(".talking-bubble")).toHaveLength(1);
+    expect(document.querySelector(".student-sprite-button.speaking .talking-bubble")).toBeTruthy();
+    const teacher = {...line, event_id: "teacher", student_ids: [],
+      payload: {speaker_id: "Teacher", content: "Compare the birds.", interaction_type: "question"}};
+    rerender(<ClassroomView {...props} interactions={[line, teacher]} />);
+    expect(document.querySelectorAll(".talking-bubble")).toHaveLength(1);
+    expect(document.querySelector(".teacher-sprite.speaking .talking-bubble")).toBeTruthy();
+    expect(screen.getByRole("img", {name: "Asking a question"})).toBeTruthy();
+  });
+
+  it("shows named birds on the board, retains context for student attributes, and hides pictures during tests", () => {
+    const lesson: RunManifest = {...manifest, assessment_definitions: [{
+      assessment_id: "birds", item_definitions: [
+        {item_id: "mallard", label: "Mallard", task_type: "classification", image_url: "/mallard.svg"},
+        {item_id: "teal", label: "Green-winged teal", task_type: "classification", image_url: "/teal.svg"},
+      ],
+    }]};
+    const teacher = {...line, event_id: "teacher",
+      payload: {speaker_id: "Teacher", content: "Look at the mallards' bills."}};
+    const attribute = {...line, event_id: "attribute", payload: {...line.payload, content: "Its bill is yellow."}};
+    const comparison = {...line, event_id: "compare", payload: {...line.payload, content: "The teal has a different head than the mallard."}};
+    const {rerender} = render(<ClassroomView {...props} manifest={lesson} interactions={[teacher, attribute, comparison]} selectedEvent="teacher" />);
+    expect(document.querySelector(".lesson-board image")?.getAttribute("href")).toBe("/mallard.svg");
+    rerender(<ClassroomView {...props} manifest={lesson} interactions={[teacher, attribute, comparison]} selectedEvent="attribute" />);
+    expect(document.querySelectorAll(".lesson-board image")).toHaveLength(1);
+    expect(document.querySelector(".lesson-board image")?.getAttribute("href")).toBe("/mallard.svg");
+    rerender(<ClassroomView {...props} manifest={lesson} interactions={[teacher, attribute, comparison]} />);
+    expect(document.querySelectorAll(".lesson-board image")).toHaveLength(2);
+    rerender(<ClassroomView {...props} manifest={lesson} interactions={[teacher, attribute, comparison]} activity={{...props.activity, isTest: true}} />);
+    expect(document.querySelector(".lesson-board")).toBeNull();
+    expect(document.querySelector(".talking-bubble")).toBeNull();
+    const recorded = {...teacher, payload: {...teacher.payload,
+      lesson_image_url: "/recorded.svg", lesson_image_alt: "Recorded lesson picture"}};
+    rerender(<ClassroomView {...props} manifest={lesson} interactions={[recorded, comparison]} selectedEvent="teacher" />);
+    expect(document.querySelector(".lesson-board image")?.getAttribute("href")).toBe("/recorded.svg");
+    rerender(<ClassroomView {...props} manifest={lesson} interactions={[]} />);
+    expect(document.querySelector(".lesson-board")).toBeNull();
+  });
+
   it("lights only the displayed speaker and returns to class after testing", () => {
     const {rerender} = render(<ClassroomView {...props} />);
     expect(document.querySelectorAll(".speaking .sprite-nameplate")).toHaveLength(1);

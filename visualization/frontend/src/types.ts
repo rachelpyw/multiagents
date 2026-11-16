@@ -18,6 +18,7 @@ export interface AssessmentItemDefinition {
   image_url?: string | null;
   image_alt?: string | null;
   expected_response?: string | null;
+  answer_aliases?: string[];
 }
 
 export interface AssessmentItemResult extends AssessmentItemDefinition {
