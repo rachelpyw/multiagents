@@ -1,7 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "npm --prefix visualization/frontend ci",
-  "buildCommand": "npm --prefix visualization/frontend run build",
-  "outputDirectory": "visualization/frontend/dist"
+  "services": {
+    "web": {
+      "root": "visualization/frontend",
+      "framework": "vite"
+    },
+    "api": {
+      "root": "visualization/vercel",
+      "framework": "fastapi",
+      "entrypoint": "main:app",
+      "functions": {
+        "main.py": { "maxDuration": 300 }
+      }
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ]
 }

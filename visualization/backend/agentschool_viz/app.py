@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hmac
+import os
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from .service import RunNotFoundError, RunService
 from .architecture import ExperimentConfiguration, configuration_schema
@@ -20,6 +23,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 service = RunService()
+
+@app.middleware("http")
+async def authenticate_backend(request, call_next):
+    expected = os.getenv("AGENTSCHOOL_BACKEND_TOKEN")
+    if expected and not hmac.compare_digest(request.headers.get("X-Classroom-Token", ""), expected):
+        return JSONResponse({"detail": "Backend authentication required."}, status_code=401)
+    return await call_next(request)
 
 
 @app.get("/api/classroom")

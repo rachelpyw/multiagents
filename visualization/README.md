@@ -41,11 +41,17 @@ Open <http://localhost:5173>. The room opens the newest saved run. With no saved
 
 On this machine the frontend is served at <http://localhost:5174> (5173 is occupied).
 
-### Vercel frontend deployment
+### Vercel deployment
 
-Import the repository with its root directory left at `.`. The root `vercel.json` installs and builds `visualization/frontend` and publishes only its `dist` output. Without these explicit paths, Vercel's **Other** preset publishes the repository root without building the app and `/` returns 404.
+Import the repository with its root directory left at `.`. The root `vercel.json` defines Vercel Services: the Vite frontend at `/` and a Python API gateway at `/api/*`. Without an explicit frontend service/build path, Vercel's **Other** preset publishes the repository root without building the app and `/` returns 404.
 
-This deploys the frontend, not the native Python simulation. The Vite `/api` proxy exists only during local development. Production must route `/api/*` to a separately hosted FastAPI backend with persistent run storage and long-running native workers. A successful static deployment alone does not make live classes available; missing API requests remain explicit errors, not synthetic replacements. Never put `SCHOOLAGENT_API_KEY` in frontend environment variables or build output.
+The gateway uses project-scoped Vercel OIDC authentication to start/resume a named **persistent Vercel Sandbox**. That sandbox runs the existing FastAPI backend and genuine native workers, with CPU embeddings, student memory, teacher experience, and saved runs on its persistent filesystem. This avoids treating a stateless Function's temporary disk and subprocess lifetime as durable classroom storage. All hosting remains within the same Vercel project.
+
+Set `SCHOOLAGENT_API_KEY` in Vercel's server environment. It is passed only to the backend; an internal derived token protects the sandbox's exposed API port. The browser never receives either secret. The gateway preserves HTTP errors and streams native SSE events. Startup returns an explicit 503 while dependencies/model weights load; it never replaces failed live work with synthetic dialogue.
+
+The sandbox keeps one automatic filesystem snapshot when stopped and resumes it on later use. Sessions run for up to 45 minutes (compatible with Hobby limits); an interrupted unfinished run is explicitly marked failed after a new session starts. Completed memory checkpoints remain available. Native packages and weights install once per dependency version and remain on the persistent filesystem. Sandbox compute and snapshot storage count against Vercel quotas/billing, in addition to OpenAI usage.
+
+Local development still uses Vite's `/api` proxy to localhost; it does not provision Vercel compute.
 
 ### Mode dropdown and live classroom
 

@@ -27,6 +27,7 @@ native = [
 test = [
   "httpx>=0.27,<1",
   "pytest>=8,<9",
+  "vercel-sandbox==1.0.0",
 ]
 
 [build-system]
