@@ -37,12 +37,21 @@ async def classroom_origin() -> str:
     )
     script = "/vercel/sandbox/ensure-classroom.py"
     await box.fs.write_text(script, Path(__file__).with_name("bootstrap.py").read_text())
-    result = await box.run_command(
-        "python3", [script, "ensure", revision, box.current_session_id],
-        env={"SCHOOLAGENT_API_KEY": os.environ["SCHOOLAGENT_API_KEY"],
-             "AGENTSCHOOL_BACKEND_TOKEN": token},
-        capture_output=True, check=True,
-    )
+    async def ensure():
+        return await box.run_command(
+            "python3", [script, "ensure", revision, box.current_session_id],
+            env={"SCHOOLAGENT_API_KEY": os.environ["SCHOOLAGENT_API_KEY"],
+                 "AGENTSCHOOL_BACKEND_TOKEN": token},
+            capture_output=True, check=True,
+        )
+
+    result = await ensure()
+    if result.stdout.strip() == b"needs-source":
+        await box.fs.write_bytes(
+            f"/vercel/sandbox/classroom-source-{revision}.tar.gz",
+            Path(__file__).with_name("classroom-source.tar.gz").read_bytes(),
+        )
+        result = await ensure()
     if result.stdout.strip() != b"ready":
         detail = ("Native classroom startup failed. Check this project's Sandbox startup log."
                   if result.stdout.strip() == b"failed"

@@ -47,6 +47,8 @@ Import the repository with its root directory left at `.`. The root `vercel.json
 
 The gateway uses project-scoped Vercel OIDC authentication to start/resume a named **persistent Vercel Sandbox**. That sandbox runs the existing FastAPI backend and genuine native workers, with CPU embeddings, student memory, teacher experience, and saved runs on its persistent filesystem. This avoids treating a stateless Function's temporary disk and subprocess lifetime as durable classroom storage. All hosting remains within the same Vercel project.
 
+The API build bundles committed native source with `git archive` and transfers that archive to the sandbox. Runtime startup does not need a GitHub login or GitHub token. Ignored local files, including `.env` and saved runs, are never included in the archive.
+
 Set `SCHOOLAGENT_API_KEY` in Vercel's server environment. It is passed only to the backend; an internal derived token protects the sandbox's exposed API port. The browser never receives either secret. The gateway preserves HTTP errors and streams native SSE events. Startup returns an explicit 503 while dependencies/model weights load; it never replaces failed live work with synthetic dialogue.
 
 The sandbox keeps one automatic filesystem snapshot when stopped and resumes it on later use. Sessions run for up to 45 minutes (compatible with Hobby limits); an interrupted unfinished run is explicitly marked failed after a new session starts. Completed memory checkpoints remain available. Native packages and weights install once per dependency version and remain on the persistent filesystem. Sandbox compute and snapshot storage count against Vercel quotas/billing, in addition to OpenAI usage.

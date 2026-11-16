@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.error
 import urllib.request
@@ -56,10 +57,9 @@ def start(revision: str, session: str) -> None:
                     manifest["mode"] = "recorded"
                     configuration.update(status="failed", error="The Vercel runtime session ended before this run completed. Start a new class.")
                     path.write_text(json.dumps(manifest))
-        if not CODE.exists():
-            subprocess.run(["git", "clone", "--filter=blob:none", "https://github.com/rachelpyw/multiagents.git", str(CODE)], check=True)
-        subprocess.run(["git", "fetch", "origin", revision], cwd=CODE, check=True)
-        subprocess.run(["git", "checkout", "--detach", revision], cwd=CODE, check=True)
+        CODE.mkdir(exist_ok=True)
+        with tarfile.open(HOME / f"classroom-source-{revision}.tar.gz", "r:gz") as archive:
+            archive.extractall(CODE, filter="data")
         python = CODE / ".venv/bin/python"
         if not python.exists():
             subprocess.run(["uv", "venv", "--python", "3.12", str(CODE / ".venv")], check=True)
@@ -107,6 +107,8 @@ if __name__ == "__main__":
         print("ready")
     elif FAILURE.exists() and json.loads(FAILURE.read_text())["revision"] == revision:
         print("failed")
+    elif not (HOME / f"classroom-source-{revision}.tar.gz").exists():
+        print("needs-source")
     else:
         with LOG.open("a") as log:
             subprocess.Popen([sys.executable, __file__, "start", revision, session],

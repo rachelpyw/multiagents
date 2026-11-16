@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
@@ -69,6 +70,26 @@ def test_gateway_preserves_api_method_body_query_and_errors(gateway, monkeypatch
     assert str(seen[0].url) == "https://native.invalid/api/runs/run-1/conversations?follow=true"
     assert seen[0].headers["X-Classroom-Token"] == gateway.backend_token()
     assert b'"source_id":"A"' in seen[0].content
+
+
+def test_gateway_uploads_committed_source_when_runtime_needs_it(gateway, monkeypatch):
+    monkeypatch.setenv("SCHOOLAGENT_API_KEY", "unit-test-placeholder")
+    monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "test-revision")
+    monkeypatch.setattr(gateway.Path, "read_bytes", lambda self: b"committed-source")
+    box = SimpleNamespace(
+        fs=SimpleNamespace(write_text=AsyncMock(), write_bytes=AsyncMock()),
+        run_command=AsyncMock(side_effect=[
+            SimpleNamespace(stdout=b"needs-source\n"), SimpleNamespace(stdout=b"ready\n"),
+        ]),
+        current_session_id="session-1",
+        routes=[SimpleNamespace(port=8000, url="https://native.invalid")],
+    )
+    monkeypatch.setattr(gateway.sandbox, "get_or_create_sandbox", AsyncMock(return_value=(box, False)))
+    assert asyncio.run(gateway.classroom_origin()) == "https://native.invalid"
+    box.fs.write_bytes.assert_awaited_once_with(
+        "/vercel/sandbox/classroom-source-test-revision.tar.gz", b"committed-source",
+    )
+    assert box.run_command.await_count == 2
 
 
 def test_gateway_proxies_sse_without_buffering(gateway, monkeypatch):

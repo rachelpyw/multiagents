@@ -9,8 +9,12 @@
       "root": "visualization/vercel",
       "framework": "fastapi",
       "entrypoint": "main:app",
+      "buildCommand": "python3 package_source.py",
       "functions": {
-        "main.py": { "maxDuration": 300 }
+        "main.py": {
+          "maxDuration": 300,
+          "includeFiles": "classroom-source.tar.gz"
+        }
       }
     }
   },
