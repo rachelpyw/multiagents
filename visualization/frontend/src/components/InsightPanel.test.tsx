@@ -13,6 +13,11 @@ const event = (id: string, student: string, payload: NormalizedEvent["payload"],
   simulation_time: "2025-09-01T08:00:00", event_kind: kind, student_ids: [student], source_record_refs: [],
   payload,
 });
+const nativeEvent = (id: string, student: string, endpoint: string, action: string): NormalizedEvent => ({
+  ...event(id, student, {agent_id: student, endpoint, phase: "cognitive", action}),
+  source_record_refs: [{path: endpoint === "update_experience"
+    ? "runtime/teacher/teacher.py" : `runtime/student/${endpoint}.py`, hook: endpoint}],
+});
 const props = {
   manifest, states: {}, selectedStudent: "A", mode: "student" as const,
   onMode: vi.fn(), onStudent: vi.fn(), onEvent: vi.fn(), onClose: vi.fn(),
@@ -22,19 +27,41 @@ afterEach(cleanup);
 
 it("composes character, trail, and endpoint filters without showing future records", () => {
   const events = [
-    event("0", "A", {agent_id: "A", endpoint: "perceive", action: "A perceived the lesson"}),
-    event("1", "B", {agent_id: "B", endpoint: "plan", action: "B's private plan"}),
-    event("2", "A", {agent_id: "A", endpoint: "execute", action: "Future action"}),
+    nativeEvent("0", "A", "perceive", "A perceived the lesson"),
+    nativeEvent("1", "B", "plan", "B's private plan"),
+    nativeEvent("2", "A", "execute", "Future action"),
   ];
   render(<InsightPanel {...props} events={events} playhead={1} />);
   fireEvent.change(screen.getByLabelText("Trail"), {target: {value: "decisions"}});
-  fireEvent.change(screen.getByLabelText("Decision endpoint"), {target: {value: "perceive"}});
+  fireEvent.change(screen.getByLabelText("AgentSchool function"), {target: {value: "perceive"}});
   expect(screen.getByText("A perceived the lesson")).toBeTruthy();
   expect(screen.queryByText("B's private plan")).toBeNull();
   expect(screen.queryByText("Future action")).toBeNull();
   expect(screen.queryByRole("option", {name: "execute"})).toBeNull();
   fireEvent.click(screen.getByRole("button", {name: /A perceived the lesson/}));
   expect((screen.getByLabelText("Trail") as HTMLSelectElement).value).toBe("decisions");
+});
+
+it("offers only source-backed native calls, not speech labels, app events, or orchestration hooks", () => {
+  const functions = ["perceive", "retrieve", "reflect", "plan", "execute", "update_experience"];
+  const events = [
+    ...functions.map((name, index) => nativeEvent(String(index), name === "update_experience" ? "Teacher" : "A", name, `${name} completed`)),
+    event("6", "A", {active_event: "lecture", content: "Teacher explanation"}, "interaction"),
+    event("7", "A", {action: "Unattributed app action"}),
+    event("8", "A", {period: "start_class"}, "state_snapshot"),
+    {...nativeEvent("9", "Teacher", "class_budget", "Round boundary reached"),
+      source_record_refs: [{path: "runtime/teacher/teacher.py", hook: "class_budget"}]},
+    event("10", "A", {endpoint: "perceive", phase: "cognitive", action: "Unverified perceive label"}),
+  ];
+  render(<InsightPanel {...props} mode="overview" events={events} playhead={10} />);
+  const options = [...screen.getByLabelText("AgentSchool function").querySelectorAll("option")];
+  expect(options.map((option) => option.value)).toEqual(["all", ...functions.sort()]);
+  fireEvent.change(screen.getByLabelText("Trail"), {target: {value: "decisions"}});
+  expect(screen.getByText("update_experience completed")).toBeTruthy();
+  expect(screen.queryByText("Teacher explanation")).toBeNull();
+  expect(screen.queryByText("Unattributed app action")).toBeNull();
+  expect(screen.queryByText("Round boundary reached")).toBeNull();
+  expect(screen.queryByText("Unverified perceive label")).toBeNull();
 });
 
 it("shows only incorrectly classified pictures when outcome and test filters are combined", () => {

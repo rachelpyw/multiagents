@@ -27,7 +27,7 @@ it.each([true, false])("opens an English recording or demo rather than older non
   expect(fetchMock).not.toHaveBeenCalledWith("/api/runs/older-language/manifest");
 });
 
-it("queues live steering during dialogue and while viewing earlier messages", async () => {
+it.each(["completed", "declined"])("queues live steering during dialogue and history without faking success (%s)", async (receiptStatus) => {
   const manifest: RunManifest = {
     schema_version: "1.0", run_id: "live", mode: "live", label: "Live test",
     created_at: "2025-09-01T08:00:00", upstream_commit: "test", concept_mapping: {},
@@ -51,7 +51,7 @@ it("queues live steering during dialogue and while viewing earlier messages", as
       : url.endsWith("/manifest") ? manifest
       : url.endsWith("/events") ? [question]
       : url.endsWith("/conversations") ? {available: true, mode: "live"}
-      : {status: "completed", detail: "2 messages delivered."};
+      : {status: receiptStatus, detail: receiptStatus === "completed" ? "2 messages delivered." : "No student chose to speak."};
     return new Response(JSON.stringify(body));
   });
   let stream: {
@@ -87,15 +87,19 @@ it("queues live steering during dialogue and while viewing earlier messages", as
   act(() => stream?.onmessage?.({data: JSON.stringify(reply)}));
   await waitFor(() => expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent)
     .toContain("Compare its yellow bill."));
-  await waitFor(() => expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent)
-    .toContain("Steering delivered"));
+  if (receiptStatus === "completed") {
+    await screen.findByRole("img", {name: "Complete"});
+  } else {
+    await screen.findByText("declined: No student chose to speak.");
+    expect(screen.queryByRole("img", {name: "Complete"})).toBeNull();
+  }
   act(() => stream?.onopen?.());
-  expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).toContain("Steering delivered");
+  expect(screen.queryByText("Steering delivered")).toBeNull();
 
   fireEvent.change(screen.getByRole("slider", {name: "Replay playhead"}), {target: {value: "0"}});
   fireEvent.keyDown(document.body, {code: "Space"});
   await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-  expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).toContain("Steering still goes to the current live class");
+  expect(document.querySelector(".steering-controls")).toBeNull();
   expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent).not.toContain("Compare its yellow bill.");
   fireEvent.click(screen.getByRole("button", {name: "Follow live"}));
   await waitFor(() => expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent)
@@ -178,10 +182,35 @@ it("opens a dedicated test view with real incoming progress and keeps the seated
   fireEvent.click(screen.getByRole("button", {name: "Back to classroom"}));
   await waitFor(() => expect(document.querySelectorAll("[data-desk-id]")).toHaveLength(6));
   expect(new Set([...document.querySelectorAll("[data-desk-id]")].map((element) => (element as SVGElement).style.transform)).size).toBe(6);
-  expect(screen.getByText("Steering off · test")).toBeTruthy();
+  expect(screen.queryByText("[space] to talk")).toBeNull();
   fireEvent.click(screen.getByRole("button", {name: "View test"}));
   act(() => stream?.onmessage?.({data: JSON.stringify(result)}));
   await waitFor(() => expect(screen.getByText("1/6 students finished")).toBeTruthy());
   completed = true;
   await waitFor(() => expect(screen.getByText("6/6 students finished")).toBeTruthy(), {timeout: 2500});
+});
+
+it("defaults to the classroom even when the latest run is an assessment, and leaves results for the next class", async () => {
+  const assessment: RunManifest = {
+    schema_version: "1.0", run_id: "test", mode: "recorded", label: "Completed test", concept_mapping: {},
+    created_at: "2025-09-01T08:00:00", upstream_commit: "test", teacher: {name: "Teacher"},
+    roster: [{student_id: "A", display_name: "Avery", initials: "A", color: "#456", attributes: {}}],
+    run_configuration: {runner: "assessment", language: "en", status: "complete", source_run_id: "native-lesson"},
+  };
+  const next = {...assessment, run_id: "native-next", run_configuration: {runner: "native", language: "en", status: "complete"}};
+  vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) =>
+    new Response(JSON.stringify(options?.method === "POST" ? next
+      : url === "/api/runs" ? [assessment]
+      : url === "/api/classroom" ? {live_available: false}
+      : url.endsWith("/events") ? []
+      : url.includes("/native-next/") ? next : assessment))));
+  render(<App />);
+  await screen.findByRole("region", {name: "Classroom dialogue"});
+  expect(screen.queryByRole("region", {name: "Independent bird test"})).toBeNull();
+  fireEvent.click(screen.getByRole("button", {name: "View test"}));
+  await screen.findByRole("region", {name: "Independent bird test"});
+  fireEvent.click(screen.getByRole("button", {name: "Next class"}));
+  await screen.findByRole("region", {name: "Classroom dialogue"});
+  expect(screen.queryByRole("region", {name: "Independent bird test"})).toBeNull();
+  expect(screen.queryByRole("button", {name: "View test"})).toBeNull();
 });

@@ -1090,11 +1090,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .classroom-commands { margin-left: auto; display: flex; gap: 8px; }
 .game-dialogue .dialogue-speaker { margin-top: 9px; font-size: 14px; flex-wrap: wrap; }
 .game-dialogue .dialogue-speaker span { margin-left: 0; font-size: 12px; }
-.game-dialogue .steering-state, .game-dialogue .start-test-button { padding: 7px 10px; font-size: 12px; border: 2px solid #405b72; box-shadow: inset 1px 1px #93b4cd, inset -1px -1px #294967; }
-.game-dialogue .steering-state:disabled { color: #42596a; background: #e2e8e9; box-shadow: none; cursor: default; }
-.game-dialogue .steering-state.ready { color: #173a28; background: #b6d6ad; border-color: #487451; }
+.game-dialogue .start-test-button { padding: 7px 10px; font-size: 12px; border: 2px solid #405b72; box-shadow: inset 1px 1px #93b4cd, inset -1px -1px #294967; }
 .game-dialogue .start-test-button:disabled { opacity: .55; cursor: default; }
-.game-dialogue .steering-proof { color: #634818; background: #f0dfab; padding: 3px 6px; border: 1px solid #b39b60; }
 .game-dialogue .steering-feedback { color: #7d432b; }
 .pixel-connection.steered path { stroke-width: 4px; }
 .stage-title { top: 10px; left: 14px; right: 14px; }
@@ -1208,10 +1205,8 @@ html body .game-shell, html body .game-shell * { font-family: "Helvetica Neue", 
 .game-dialogue .dialogue-speaker { color: #e7d995; margin-top: 6px; font-size: 13px; }
 .game-dialogue .dialogue-speaker strong { font-weight: 500; }
 .game-dialogue button, .pixel-button, .pixel-button.primary { border: 1px solid #bac78d60; border-radius: 4px; color: #edf1dd; background: #35432c; box-shadow: none; font-weight: 500; }
-.game-dialogue .steering-state, .game-dialogue .start-test-button, .game-dialogue .next-class-button { padding: 6px 10px; font-size: 12px; border: 1px solid #bac78d60; box-shadow: none; }
-.game-dialogue .steering-state:disabled { color: #98a58b; background: #b6c59608; border: 1px solid #b6c59625; }
-.game-dialogue .steering-state.ready, .game-dialogue .next-class-button { color: #1b2519; background: #d5d98d; border-color: #e8edb5; }
-.game-dialogue .steering-proof { color: #dfdfac; background: #c3cc8020; border: 1px solid #c3cc803a; border-radius: 4px; }
+.game-dialogue .start-test-button, .game-dialogue .next-class-button { padding: 6px 10px; font-size: 12px; border: 1px solid #bac78d60; box-shadow: none; }
+.game-dialogue .next-class-button { color: #1b2519; background: #d5d98d; border-color: #e8edb5; }
 .game-dialogue .steering-feedback { color: #c7cfa9; }
 .replay-hud { color: #ccd6bc; background: rgba(23, 32, 25, .9); backdrop-filter: blur(16px); border: 1px solid #bac78d44; border-radius: 7px; box-shadow: none; height: 44px; }
 .replay-hud input[type="range"] { accent-color: #c3d28e; }
@@ -1225,11 +1220,13 @@ html body .game-shell, html body .game-shell * { font-family: "Helvetica Neue", 
 .speaking .sprite-name { fill: #22291b; font-weight: 700; }
 .drawer-open-button { color: #dbe5ca; background: #273923d9; border: 1px solid #bac78d60; box-shadow: none; }
 
-.steering-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 6px; }
-.steering-controls label { display: flex; align-items: center; gap: 8px; color: #d3ddc2; font-size: 13px; }
-.steering-controls select, .test-student-filter select { color: #edf1dd; background: #263225; border: 1px solid #bac78d60; border-radius: 4px; padding: 8px; font: inherit; }
-.steering-controls select { padding: 5px 8px; }
-.steering-controls small { color: #b7c5a5; font-size: 12px; max-width: 380px; }
+.talk-prompt { cursor: pointer; }
+.talk-prompt rect, .talk-prompt path { fill: #1b271ff2; stroke: #d5d98d; stroke-width: 1.5px; }
+.talk-prompt text { fill: #edf1dd; font-size: 16px; font-weight: 500; pointer-events: none; }
+.talk-prompt:hover rect, .talk-prompt:focus rect { fill: #35432c; stroke: #fff3bb; }
+.steering-status { display: inline-flex; align-items: center; gap: 5px; color: #c7cfa9; font-size: 12px; font-weight: 400; }
+.steering-status svg { width: 14px; height: 14px; fill: none; stroke: #d5d98d; stroke-width: 2px; }
+.test-student-filter select { color: #edf1dd; background: #263225; border: 1px solid #bac78d60; border-radius: 4px; padding: 8px; font: inherit; }
 .bird-test-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
 .bird-test-grid figure { margin: 0; padding: 8px; border: 1px solid #c6d0b625; border-radius: 6px; background: #d6e5ad06; }
 .bird-test-grid img { width: 100%; aspect-ratio: 5 / 3; object-fit: contain; image-rendering: pixelated; border-radius: 4px; }

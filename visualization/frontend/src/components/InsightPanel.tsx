@@ -17,8 +17,14 @@ interface Props {
   onClose: () => void;
 }
 
-const endpointOf = (event: NormalizedEvent): string =>
-  event.payload.endpoint ?? event.payload.active_event ?? event.event_kind;
+const nativeEndpoints = new Set(["perceive", "retrieve", "reflect", "plan", "execute", "update_experience"]);
+const endpointOf = (event: NormalizedEvent): string | undefined => {
+  const endpoint = event.payload.endpoint;
+  if (typeof endpoint !== "string" || !nativeEndpoints.has(endpoint) || event.payload.phase !== "cognitive") return undefined;
+  const path = endpoint === "update_experience" ? "runtime/teacher/teacher.py" : `runtime/student/${endpoint}.py`;
+  return event.source_record_refs.some((source) => source.path === path && source.hook === endpoint)
+    ? endpoint : undefined;
+};
 const textOf = (event: NormalizedEvent): string =>
   event.payload.content ?? event.payload.action ?? event.payload.note ?? event.payload.evidence
   ?? (event.event_kind === "assessment" ? `${event.payload.score_percent ?? "—"}% · ${event.payload.correct_count}/${event.payload.expected_count} correct`
@@ -37,13 +43,16 @@ export function InsightPanel(props: Props) {
   const scoped = visible.filter((event) => character === "all" || event.student_ids.includes(character)
     || event.payload.agent_id === character || event.payload.instructor_id === character
     || event.payload.speaker_id === character || recordedRecipients(event, props.manifest).includes(character));
-  const endpoints = [...new Set(scoped.map(endpointOf))].sort();
+  const endpoints = [...new Set(scoped.flatMap((event) => {
+    const native = endpointOf(event);
+    return native ? [native] : [];
+  }))].sort();
   const filtered = scoped.filter((event) =>
     (endpoint === "all" || endpointOf(event) === endpoint)
     && (outcome === "all" || event.event_kind === "assessment"
       && event.payload.item_results?.some((item: {status: string}) => item.status === outcome))
     && (trail === "all" || (trail === "dialogue" && event.event_kind === "interaction")
-      || (trail === "decisions" && event.event_kind === "agent_action")
+      || (trail === "decisions" && endpointOf(event) !== undefined)
       || (trail === "learning" && ["state_change", "state_snapshot", "instructor_snapshot"].includes(event.event_kind))
       || (trail === "tests" && event.event_kind === "assessment")
       || (trail === "steering" && (event.payload.observer_request_id || event.payload.steering_context_ids?.length))));
@@ -73,11 +82,11 @@ export function InsightPanel(props: Props) {
       </select></label>
       <label>Trail<select value={trail} onChange={(event) => setTrail(event.target.value)}>
         <option value="all">Overview + recent trail</option><option value="dialogue">Dialogue</option>
-        <option value="decisions">Actions & decisions</option><option value="learning">Learning changes</option>
+        <option value="decisions">Native calls</option><option value="learning">Learning changes</option>
         <option value="tests">Test results</option><option value="steering">User steering</option>
       </select></label>
-      <label>Decision endpoint<select value={endpoint} onChange={(event) => setEndpoint(event.target.value)}>
-        <option value="all">All endpoints</option>
+      <label>AgentSchool function<select value={endpoint} onChange={(event) => setEndpoint(event.target.value)}>
+        <option value="all">All functions</option>
         {endpoints.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}
       </select></label>
       <label>Outcome<select value={outcome} onChange={(event) => setOutcome(event.target.value)}>
@@ -125,7 +134,8 @@ export function InsightPanel(props: Props) {
             <button onClick={() => props.onEvent(event)}>
               <header><strong>{nameOf(event.payload.speaker_id ?? event.payload.agent_id ?? event.payload.student_id ?? teacherId)}</strong>
                 <time>{new Date(event.simulation_time).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}</time></header>
-              <p>{textOf(event)}</p><small>{endpointOf(event).replaceAll("_", " ")}</small>
+              <p>{textOf(event)}</p><small>{endpointOf(event) && "AgentSchool · "}
+                {(endpointOf(event) ?? event.payload.active_event ?? event.event_kind).replaceAll("_", " ")}</small>
             </button>
             {event.event_kind === "assessment" && !unfiltered && <ul className="filtered-results">
               {event.payload.item_results?.filter((item: {status: string}) => outcome === "all" || item.status === outcome)

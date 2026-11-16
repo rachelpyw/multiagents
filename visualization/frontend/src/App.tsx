@@ -26,6 +26,7 @@ export default function App() {
   const [conversationReady, setConversationReady] = useState(false);
   const [conversationNotice, setConversationNotice] = useState("");
   const [conversationRequest, setConversationRequest] = useState<string>();
+  const [steeringState, setSteeringState] = useState<"pending" | "complete">();
   const [modeBusy, setModeBusy] = useState(false);
   const [testStarting, setTestStarting] = useState(false);
   const [classStarting, setClassStarting] = useState(false);
@@ -72,7 +73,7 @@ export default function App() {
         setFollowingLive(true);
         setConversationNotice("");
         setConversationRequest(undefined);
-        setTestPanelOpen(nextManifest.run_configuration?.runner === "assessment");
+        setSteeringState(undefined);
         setTestStudent("");
         conversationInFlight.current = false;
         setSelectedStudent(nextManifest.roster[0]?.student_id ?? "");
@@ -119,10 +120,10 @@ export default function App() {
         if (!response.ok) throw new Error(body.detail ?? "Conversation status unavailable");
         if (!active || currentRun.current !== manifest.run_id) return;
         if (conversationRequest) {
-          setConversationNotice(body.status === "completed" ? "Steering delivered"
-            : body.status === "queued" ? "Steering queued"
-            : body.status === "processing" ? "Students talking…"
-            : `${body.status}: ${body.detail}`);
+          setSteeringState(body.status === "completed" ? "complete"
+            : ["queued", "processing"].includes(body.status) ? "pending" : undefined);
+          setConversationNotice(["completed", "queued", "processing"].includes(body.status)
+            ? "" : `${body.status}: ${body.detail}`);
           if (!["queued", "processing"].includes(body.status)) {
             setConversationRequest(undefined);
             conversationInFlight.current = false;
@@ -238,7 +239,8 @@ export default function App() {
       return;
     }
     conversationInFlight.current = true;
-    setConversationNotice("Requesting steering…");
+    setSteeringState("pending");
+    setConversationNotice("");
     try {
       const response = await fetch(`/api/runs/${manifest.run_id}/conversations`, {
         method: "POST", headers: {"Content-Type": "application/json"},
@@ -248,10 +250,10 @@ export default function App() {
       if (currentRun.current !== manifest.run_id) return;
       if (!response.ok) throw new Error(body.detail ?? "Conversation request failed");
       setConversationRequest(body.request_id);
-      setConversationNotice("Steering queued · dialogue continues");
     } catch (reason) {
       if (currentRun.current !== manifest.run_id) return;
       conversationInFlight.current = false;
+      setSteeringState(undefined);
       setConversationNotice(String(reason));
     }
   };
@@ -274,6 +276,7 @@ export default function App() {
       if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Unable to start classroom.");
       if (currentRun.current !== sourceRun) return;
       const next = body as RunManifest;
+      setTestPanelOpen(false);
       setRunId(next.run_id);
     } catch (reason) {
       setConversationNotice(String(reason));
@@ -300,6 +303,7 @@ export default function App() {
       if (!response.ok) throw new Error(body.detail ?? "Unable to start test");
       if (currentRun.current !== sourceRun) return;
       setFollowingLive(true);
+      setTestPanelOpen(true);
       setRunId((body as RunManifest).run_id);
       setDrawerMode("overview");
       setDrawerOpen(true);
@@ -317,7 +321,10 @@ export default function App() {
       const response = await fetch(`/api/runs/${sourceRun}/next-class`, {method: "POST"});
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail ?? "Unable to start the next class");
-      if (currentRun.current === sourceRun) setRunId((body as RunManifest).run_id);
+      if (currentRun.current === sourceRun) {
+        setTestPanelOpen(false);
+        setRunId((body as RunManifest).run_id);
+      }
     } catch (reason) {
       setConversationNotice(String(reason));
     } finally {
@@ -348,7 +355,7 @@ export default function App() {
         selectedEvent={selectedEvent}
         conversationNotice={conversationNotice}
         conversationReady={conversationReady}
-        conversationPending={Boolean(conversationRequest)}
+        steeringState={steeringState}
         onStartTest={startTest}
         testStarting={testStarting || preparingTest}
         onNextClass={nextClass}

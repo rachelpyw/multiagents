@@ -23,7 +23,7 @@ const props = {
   manifest, interactions: [line], activity: classroomActivity([line], 0, "Teacher"),
   activePhase: createPreset(manifest, "decentralized").phases[0],
   selectedStudent: "B", conversationNotice: "", followingLive: true,
-  conversationReady: true, conversationPending: false,
+  conversationReady: true,
   onStartTest: vi.fn(), canStartTest: true, testStarting: false, testCompleted: 0,
   onNextClass: vi.fn(), canNextClass: false, classStarting: false,
   onTalk: vi.fn(), onFollowLive: vi.fn(), onStudent: vi.fn(), onEvent: vi.fn(),
@@ -51,9 +51,13 @@ describe("classroom live dialogue", () => {
   it("uses nearby preview geometry for Space, ignoring repeat and focused controls", () => {
     vi.useFakeTimers();
     render(<><ClassroomView {...props} /><button>Unrelated control</button></>);
+    expect(screen.queryByRole("button", {name: "Talk to Student A"})).toBeNull();
+    expect(screen.queryByRole("combobox", {name: "Conversation partner"})).toBeNull();
+    fireEvent.keyDown(document.body, {code: "Space"});
+    expect(props.onTalk).not.toHaveBeenCalled();
     fireEvent.click(document.querySelector('[data-floor-x="428"][data-floor-y="556"]')!);
     act(() => vi.advanceTimersByTime(6000));
-    expect((screen.getByRole("button", {name: "Space · Talk to Student A"}) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("[space] to talk").closest("svg")).toBeTruthy();
     fireEvent.keyDown(document.body, {code: "Space"});
     expect(props.onTalk).toHaveBeenCalledExactlyOnceWith("A");
     fireEvent.keyDown(document.body, {code: "Space", repeat: true});
@@ -61,18 +65,19 @@ describe("classroom live dialogue", () => {
     expect(props.onTalk).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent)
       .toContain("The bill is yellow.");
-    expect(screen.getByRole("region", {name: "Classroom dialogue"}).textContent)
-      .toContain("Side conversation");
+    fireEvent.click(document.querySelector('[data-floor-x="680"][data-floor-y="610"]')!);
+    act(() => vi.advanceTimersByTime(6000));
+    expect(screen.queryByText("[space] to talk")).toBeNull();
   });
 
-  it("can steer a speaking student directly without moving onto occupied tiles or leaving history", () => {
-    const roster = [...manifest.roster, {...manifest.roster[0], student_id: "C", display_name: "Student C"}];
-    const live = {...manifest, roster};
-    render(<ClassroomView {...props} manifest={live} selectedStudent="A" followingLive={false}
-      activePhase={createPreset(live, "blackboard").phases[0]} />);
-    fireEvent.change(screen.getByRole("combobox", {name: "Conversation partner"}), {target: {value: "C"}});
-    fireEvent.click(screen.getByRole("button", {name: "Space · Talk to Student C"}));
-    expect(props.onTalk).toHaveBeenCalledExactlyOnceWith("C");
+  it("can steer a speaking student from history once nearby, without submitting twice", () => {
+    vi.useFakeTimers();
+    render(<ClassroomView {...props} selectedStudent="A" followingLive={false}
+      activePhase={createPreset(manifest, "blackboard").phases[0]} />);
+    fireEvent.click(document.querySelector('[data-floor-x="608"][data-floor-y="466"]')!);
+    act(() => vi.advanceTimersByTime(6000));
+    fireEvent.keyDown(screen.getByRole("button", {name: "Talk to Student B"}), {code: "Space"});
+    expect(props.onTalk).toHaveBeenCalledExactlyOnceWith("B");
     expect(document.querySelector(".speaking .sprite-nameplate")?.textContent).toBe("Student A");
     expect(screen.getByText("The bill is yellow.")).toBeTruthy();
   });
@@ -87,13 +92,45 @@ describe("classroom live dialogue", () => {
       .not.toContain("The bill is yellow.");
   });
 
-  it("distinguishes blocked steering from a response that received the side conversation", () => {
-    const response = {...line, payload: {...line.payload, observer_request_id: undefined, steering_context_ids: ["request-1"]}};
-    render(<ClassroomView {...props} interactions={[response]}
-      activePhase={createPreset(manifest, "supervisor").phases[0]} />);
-    expect((screen.getByRole("button", {name: "Peer steering blocked"}) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Using side conversation")).toBeTruthy();
-    expect(screen.queryByText("Side conversation", {exact: true})).toBeNull();
+  it("shows one steering status and a check only on completion", () => {
+    vi.useFakeTimers();
+    const {rerender} = render(<ClassroomView {...props} />);
+    fireEvent.click(document.querySelector('[data-floor-x="428"][data-floor-y="556"]')!);
+    act(() => vi.advanceTimersByTime(6000));
+    fireEvent.click(screen.getByRole("button", {name: "Talk to Student A"}));
+    expect(props.onTalk).toHaveBeenCalledExactlyOnceWith("A");
+    rerender(<ClassroomView {...props} steeringState="pending" />);
+    expect(screen.getByText("Steering…")).toBeTruthy();
+    expect(screen.queryByRole("img", {name: "Complete"})).toBeNull();
+    expect(screen.queryByText("[space] to talk")).toBeNull();
+    fireEvent.keyDown(document.body, {code: "Space"});
+    expect(props.onTalk).toHaveBeenCalledTimes(1);
+    rerender(<ClassroomView {...props} steeringState="complete" />);
+    expect(screen.getByRole("img", {name: "Complete"})).toBeTruthy();
+    expect(screen.getByText("Steering…")).toBeTruthy();
+    expect(screen.queryByText(/Steering delivered|Dialogue keeps going/)).toBeNull();
+    rerender(<ClassroomView {...props} conversationNotice="Request declined: no student chose to speak." />);
+    expect(screen.getByText("Request declined: no student chose to speak.")).toBeTruthy();
+    expect(screen.queryByRole("img", {name: "Complete"})).toBeNull();
+  });
+
+  it("does not offer an overlapping peer exchange when policy, availability, replay, or testing forbids it", () => {
+    vi.useFakeTimers();
+    const {rerender} = render(<ClassroomView {...props} />);
+    fireEvent.click(document.querySelector('[data-floor-x="428"][data-floor-y="556"]')!);
+    act(() => vi.advanceTimersByTime(6000));
+    expect(screen.getByText("[space] to talk")).toBeTruthy();
+    for (const blocked of [
+      {activePhase: createPreset(manifest, "supervisor").phases[0]},
+      {conversationReady: false},
+      {manifest: {...manifest, mode: "recorded" as const}},
+      {activity: {...props.activity, isTest: true}},
+    ]) {
+      rerender(<ClassroomView {...props} {...blocked} />);
+      expect(screen.queryByText("[space] to talk")).toBeNull();
+      fireEvent.keyDown(document.body, {code: "Space"});
+    }
+    expect(props.onTalk).not.toHaveBeenCalled();
     expect(document.querySelector(".room-legend")).toBeNull();
   });
 });
