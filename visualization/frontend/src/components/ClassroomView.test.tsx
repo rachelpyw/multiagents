@@ -201,13 +201,22 @@ describe("classroom live dialogue", () => {
     expect(document.querySelector(".room-legend")).toBeNull();
   });
 
-  it("explains an occupied tile without advertising a forbidden talk control", () => {
-    render(<ClassroomView {...props} activePhase={createPreset(manifest, "pipeline").phases[0]} />);
+  it.each(["pipeline", "decentralized", "blackboard"] as const)("allows overlapping avatars without an occupied-tile warning (%s)", (mode) => {
+    vi.useFakeTimers();
+    render(<ClassroomView {...props} activePhase={createPreset(manifest, mode).phases[0]} />);
     fireEvent.click(document.querySelector('[data-floor-x="500"][data-floor-y="556"]')!);
-    expect(screen.getByText("That tile is occupied. Choose a clear aisle tile.")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(6000));
+    expect(screen.getByRole("button", {name: "Select Student B"}).style.transform)
+      .toBe("translate(500px, 556px)");
+    expect(screen.queryByText(/tile is occupied/)).toBeNull();
     expect(screen.queryByText(/Use Talk to/)).toBeNull();
-    expect(document.querySelector(".proximity-ring, .talk-eligible, .route-eligible-marker")).toBeNull();
     fireEvent.keyDown(document.body, {code: "Space"});
-    expect(props.onTalk).not.toHaveBeenCalled();
+    if (mode === "pipeline") {
+      expect(document.querySelector(".proximity-ring, .talk-eligible, .route-eligible-marker")).toBeNull();
+      expect(props.onTalk).not.toHaveBeenCalled();
+    } else {
+      expect(screen.getByText("[space] to talk")).toBeTruthy();
+      expect(props.onTalk).toHaveBeenCalledExactlyOnceWith("A");
+    }
   });
 });

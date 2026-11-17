@@ -61,7 +61,7 @@ function closestTile(position: {x: number; y: number}) {
   }, {index: 0, distance: Number.POSITIVE_INFINITY}).index;
 }
 
-function tilePath(start: number, destination: number, blocked: Set<number>) {
+function tilePath(start: number, destination: number) {
   const queue = [[start]];
   const visited = new Set([start]);
   while (queue.length) {
@@ -69,7 +69,7 @@ function tilePath(start: number, destination: number, blocked: Set<number>) {
     const current = path.at(-1)!;
     if (current === destination) return path;
     for (const neighbor of tileNeighbors[current]) {
-      if (!visited.has(neighbor) && !blocked.has(neighbor)) {
+      if (!visited.has(neighbor)) {
         visited.add(neighbor);
         queue.push([...path, neighbor]);
       }
@@ -326,19 +326,7 @@ export function ClassroomView({
     window.clearTimeout(walkTimers.current[selectedStudent]);
     const start = closestTile(studentPositions[selectedStudent]);
     const destination = closestTile(position);
-    const blocked = new Set(
-      movementTiles.flatMap((tile, index) =>
-        Object.entries(studentPositions).some(([studentId, studentPosition]) =>
-          studentId !== selectedStudent
-          && Math.hypot(studentPosition.x - tile.x, studentPosition.y - tile.y) < 58,
-        ) ? [index] : [],
-      ),
-    );
-    if (blocked.has(destination)) {
-      setMovementNotice("That tile is occupied. Choose a clear aisle tile.");
-      return;
-    }
-    const path = tilePath(start, destination, blocked).slice(1);
+    const path = tilePath(start, destination).slice(1);
     if (!path.length) {
       if (start !== destination) setMovementNotice("No clear path to that tile. Choose another aisle.");
       return;

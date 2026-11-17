@@ -472,7 +472,8 @@ class Teacher:
         self.discussed = "" 
         self.feedback = ""
         self.to_solve = ""  
-        for content in self.received:
+        received, self.received = self.received, []
+        for content in received:
             if content["active_event"] == "active":
                 self.to_solve += f"{content['speaker']}正在提出请求,具体内容为：{content['content']}；"
             elif content["active_event"] == "answer":
@@ -488,8 +489,6 @@ class Teacher:
 
             if content["active_event"] == "new_day":
                 self.time = (self.time + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
-
-        self.received = []  # clear received after processing
 
     def retrive(self, content: str):
         """从教学经验中检索相关的经验"""

@@ -114,6 +114,43 @@ def test_native_round_keeps_messages_received_during_perception(monkeypatch):
     assert person.infos == [{"active_event": "lecture", "content": "next round"}]
 
 
+def test_teacher_keeps_messages_arriving_during_perception(monkeypatch):
+    monkeypatch.setenv("SCHOOLAGENT_API_KEY", "unit-test-placeholder")
+    from teacher.teacher import Teacher
+
+    teacher = Teacher.__new__(Teacher)
+    arriving = {"active_event": "group_discussion", "speaker": "B", "content": "New steering"}
+
+    class Inbox(list):
+        def __iter__(self):
+            teacher.received.append(arriving)
+            return super().__iter__()
+
+    teacher.received = Inbox([{"active_event": "lecture", "speaker": "A", "content": "Earlier observation"}])
+    teacher.perceive()
+    assert teacher.received == [arriving]
+    assert "Earlier observation" in teacher.saw
+    assert "New steering" not in teacher.discussed
+
+
+def test_threaded_teacher_delivery_is_marshaled_onto_the_runtime_loop():
+    import threading
+
+    async def exercise():
+        loop = asyncio.get_running_loop()
+        owner_thread = threading.get_ident()
+        delivered = []
+
+        def publish(channel, message):
+            assert threading.get_ident() == owner_thread
+            delivered.append((channel, message))
+
+        await asyncio.to_thread(native_runs.publish_on_runtime_loop, loop, publish, "class", "Lesson")
+        assert delivered == [("class", "Lesson")]
+
+    asyncio.run(exercise())
+
+
 def test_native_memory_roundtrip_preserves_speaker_and_retrieval_metadata(tmp_path):
     pytest.importorskip("aiofiles")
     from student.cognitive_module.memory import Memory

@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from agentschool_viz import app as api
 from agentschool_viz.conversations import (
-    ConversationQueue, ConversationRequest, ConversationUnavailable, process_conversation,
+    ConversationQueue, ConversationRequest, ConversationUnavailable, process_conversation, run_with_conversations,
 )
 from agentschool_viz.service import RunService
 from agentschool_viz.instrumentation import RunCapture
@@ -91,6 +91,110 @@ def test_board_steering_uses_public_permissions_not_private_route_bypass(tmp_pat
     assert len(students["A"].infos) == len(students["B"].infos) == 1
     assert all(message["receiver"] == "blackboard:write" for message in teacher.infos)
 
+
+@pytest.mark.parametrize("architecture", ["decentralized", "blackboard"])
+def test_steering_dispatches_within_half_a_second_while_native_work_is_pending(tmp_path, architecture):
+    from agentschool_viz.architecture import ArchitecturePolicy, LessonPhase, register_architecture_subscriptions
+    from test_architecture import configuration
+
+    queue, initial, broadcast, students, teacher = setup_queue(tmp_path)
+    queue.complete(initial["request_id"], "declined", "Test setup")
+    phase = LessonPhase(
+        phase_id="live", label="Live", architecture=architecture,
+        routes=[{"source_id": "A", "target_id": "B"}, {"source_id": "B", "target_id": "A"}],
+        blackboard={"readers": ["A", "B", "Teacher"], "writers": ["A", "B"]} if architecture == "blackboard" else None,
+    )
+    broadcast.set_delivery_policy(ArchitecturePolicy(configuration(phase)))
+    register_architecture_subscriptions(broadcast, broadcast.delivery_policy, {**students, "Teacher": teacher})
+
+    async def exercise():
+        started, release, generated = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        async def native_round():
+            started.set()
+            await release.wait()
+
+        async def generate(student, target):
+            generated.set()
+            return f"{student.name}: compare its field marks."
+
+        async def process():
+            await process_conversation(queue, students, teacher, broadcast, "now",
+                                       assistance_allowed=True, generate=generate)
+
+        task = asyncio.create_task(run_with_conversations(native_round(), process))
+        try:
+            await started.wait()
+            receipt = queue.enqueue(ConversationRequest(source_id="A", target_id="B"))
+            await asyncio.wait_for(generated.wait(), timeout=.5)
+            assert queue.receipt(receipt["request_id"])["status"] == "completed"
+            assert not task.done()
+        finally:
+            release.set()
+            await task
+
+    asyncio.run(exercise())
+
+
+def test_test_start_during_generation_prevents_delivery(tmp_path):
+    queue, receipt, broadcast, students, teacher = setup_queue(tmp_path)
+
+    async def generate(student, target):
+        queue.set_ready(False)
+        return "This must not enter the test."
+
+    asyncio.run(process_conversation(queue, students, teacher, broadcast, "now",
+                                    assistance_allowed=True, generate=generate))
+    assert queue.receipt(receipt["request_id"])["status"] == "rejected"
+    assert all(not student.infos for student in students.values())
+    assert not teacher.infos
+
+
+def test_blocking_teacher_step_does_not_delay_steering_or_write_from_another_thread(tmp_path):
+    import threading
+    from agentschool_viz.native_runs import publish_on_runtime_loop
+
+    queue, initial, broadcast, students, teacher = setup_queue(tmp_path)
+    queue.complete(initial["request_id"], "declined", "Test setup")
+
+    async def exercise():
+        loop = asyncio.get_running_loop()
+        owner_thread = threading.get_ident()
+        started, generated = asyncio.Event(), asyncio.Event()
+        release = threading.Event()
+
+        def publish(channel, message):
+            assert threading.get_ident() == owner_thread
+            started.set()
+
+        def teacher_step():
+            publish_on_runtime_loop(loop, publish, "class", "Teaching")
+            if not release.wait(5):
+                raise TimeoutError("Test did not release its teacher step.")
+
+        async def native_round():
+            await asyncio.to_thread(teacher_step)
+
+        async def generate(student, target):
+            generated.set()
+            return "A short peer observation."
+
+        async def process():
+            await process_conversation(queue, students, teacher, broadcast, "now",
+                                       assistance_allowed=True, generate=generate)
+
+        task = asyncio.create_task(run_with_conversations(native_round(), process))
+        try:
+            await asyncio.wait_for(started.wait(), timeout=1)
+            receipt = queue.enqueue(ConversationRequest(source_id="A", target_id="B"))
+            await asyncio.wait_for(generated.wait(), timeout=.5)
+            assert queue.receipt(receipt["request_id"])["status"] == "completed"
+            assert not task.done()
+        finally:
+            release.set()
+            await task
+
+    asyncio.run(exercise())
 
 @pytest.mark.parametrize("assistance_allowed", [True, False])
 def test_blocked_routes_and_independent_test_never_generate_or_deliver(tmp_path, assistance_allowed):

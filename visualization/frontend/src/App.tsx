@@ -151,7 +151,7 @@ export default function App() {
       }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 1500);
+    const timer = window.setInterval(() => void poll(), conversationRequest ? 500 : 1500);
     return () => { active = false; window.clearInterval(timer); };
   }, [manifest?.run_id, manifest?.mode, conversationRequest, followingLive]);
 

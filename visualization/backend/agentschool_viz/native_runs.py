@@ -7,10 +7,12 @@ import json
 import os
 import shutil
 import sys
+import threading
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, Callable
 from uuid import uuid4
 
 from .architecture import ArchitecturePolicy, Blackboard, PipelineHistory, register_architecture_subscriptions
@@ -23,6 +25,15 @@ def steering_ids(messages: list[dict]) -> list[str]:
     return sorted({request_id for message in messages for request_id in
                    ([message["observer_request_id"]] if message.get("observer_request_id") else [])
                    + (message.get("steering_context_ids") or [])})
+
+
+def publish_on_runtime_loop(
+    loop: asyncio.AbstractEventLoop, publish: Callable[[str, Any], None], channel: str, message: Any,
+) -> None:
+    async def deliver() -> None:
+        publish(channel, message)
+
+    asyncio.run_coroutine_threadsafe(deliver(), loop).result()
 
 
 def create_native_run(service: RunService, source_id: str, request: StartModeRequest, *, continuation: bool = False) -> RunManifest:
@@ -167,7 +178,7 @@ async def execute_native(output: Path) -> None:
     from util.BroadcastSys import BroadcastSys
     from util.Recorder import Recorder
     from .architecture import ExperimentConfiguration
-    from .conversations import ConversationQueue, process_conversation
+    from .conversations import ConversationQueue, process_conversation, run_with_conversations
     from .instrumentation import RunCapture, require_english_public_text
 
     configuration = ExperimentConfiguration.model_validate(manifest.run_configuration["experiment"])
@@ -229,11 +240,15 @@ async def execute_native(output: Path) -> None:
 
     board = Blackboard(phase.blackboard) if phase.blackboard else None
     pipeline = PipelineHistory(phase.artifact_name) if phase.artifact_name else None
+    runtime_loop = asyncio.get_running_loop()
+    runtime_thread = threading.get_ident()
 
     class Transport(BroadcastSys):
         public_messages = 0
 
         def publish_sync(self, channel, message):
+            if threading.get_ident() != runtime_thread:
+                return publish_on_runtime_loop(runtime_loop, self.publish_sync, channel, message)
             require_english_public_text({"content": message.content})
             if not message.observer_request_id:
                 message.steering_context_ids = input_contexts.get(message.speaker, [])
@@ -283,6 +298,38 @@ async def execute_native(output: Path) -> None:
     manifest.run_configuration["status"] = "running"
     write_manifest(output, manifest)
     started = time.monotonic()
+
+    async def process_pending():
+        await process_conversation(
+            queue, students, teacher, transport, clock,
+            assistance_allowed=not (output / "stop.requested").exists(),
+        )
+
+    async def move_round():
+        input_contexts[teacher.name] = steering_ids(teacher.received)
+        action = await asyncio.to_thread(teacher.move)
+        capture.record_teacher(teacher, clock, action)
+        ordered = phase.pipeline_order if pipeline else list(students)
+
+        async def move_student(name):
+            if name not in students:
+                return
+            person = students[name]
+            input_contexts[name] = steering_ids(person.infos)
+            before = len(person.mem.seq_knowledge)
+            result = await person.move()
+            capture.record_student_action(name, clock, result)
+            if pipeline and len(person.mem.seq_knowledge) > before:
+                transport.publish_sync(f"artifact:{phase.artifact_name}", BroadcastMessage(
+                    current_time=clock, message_type=MessageType.CLASS, active_event="lecture",
+                    speaker=name, content=person.mem.seq_knowledge[0].content))
+
+        if pipeline:
+            for name in ordered:
+                await move_student(name)
+        else:
+            await asyncio.gather(*(move_student(name) for name in ordered))
+
     try:
         for _ in range(teacher.class_turns):
             if (output / "stop.requested").exists():
@@ -294,28 +341,7 @@ async def execute_native(output: Path) -> None:
                 endpoint("class_budget", teacher.name, "round boundary reached")
                 break
             queue.set_ready(True)
-            input_contexts[teacher.name] = steering_ids(teacher.received)
-            action = teacher.move()
-            capture.record_teacher(teacher, clock, action)
-            ordered = phase.pipeline_order if pipeline else list(students)
-            async def move_student(name):
-                if name not in students:
-                    return
-                person = students[name]
-                input_contexts[name] = steering_ids(person.infos)
-                before = len(person.mem.seq_knowledge)
-                result = await person.move()
-                capture.record_student_action(name, clock, result)
-                if pipeline and len(person.mem.seq_knowledge) > before:
-                    transport.publish_sync(f"artifact:{phase.artifact_name}", BroadcastMessage(
-                        current_time=clock, message_type=MessageType.CLASS, active_event="lecture",
-                        speaker=name, content=person.mem.seq_knowledge[0].content))
-            if pipeline:
-                for name in ordered:
-                    await move_student(name)
-            else:
-                await asyncio.gather(*(move_student(name) for name in ordered))
-            await process_conversation(queue, students, teacher, transport, clock, assistance_allowed=True)
+            await run_with_conversations(move_round(), process_pending)
             capture.record_students(students, clock)
             clock += timedelta(seconds=60)
             capture.current_simulation_time = str(clock)

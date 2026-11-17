@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 import time
@@ -55,7 +56,7 @@ class ConversationQueue:
                 raise ConversationUnavailable("A conversation is already queued or being generated.")
             db.execute(
                 "INSERT INTO requests VALUES (?, ?, ?, 'queued', ?, ?)",
-                (request_id, request.source_id, request.target_id, "Waiting for the next round boundary.", time.time()),
+                (request_id, request.source_id, request.target_id, "Waiting for the live conversation dispatcher.", time.time()),
             )
         return self.receipt(request_id)
 
@@ -101,8 +102,25 @@ async def generate_student_comment(student: Any, target_id: str) -> str:
     own_chat = [str(node.content) for node in (student.scratch.chat_buffer or [])[-6:]]
     context = json.dumps(observations, ensure_ascii=False)
     context += "\nObserver invited a brief side comment to " + target_id
-    context += ". Stay with the current lesson; preserve uncertainty. You may remain silent."
+    context += ". Use at most two short sentences. Stay with the current lesson; preserve uncertainty. You may remain silent."
     return await run_ds_prompt_group_discussion(student, context, "\n".join(own_chat), [target_id])
+
+
+async def run_with_conversations(
+    round_action: Awaitable[None],
+    process_pending: Callable[[], Awaitable[None]],
+) -> None:
+    action = asyncio.ensure_future(round_action)
+    try:
+        while not action.done():
+            await process_pending()
+            await asyncio.wait({action}, timeout=.1)
+        await action
+        await process_pending()
+    finally:
+        # A threaded teacher step cannot be cancelled safely while it may still publish.
+        if not action.done():
+            await asyncio.gather(action, return_exceptions=True)
 
 
 async def process_conversation(
@@ -148,8 +166,8 @@ async def process_conversation(
             text = broadcast_system._strip_think_blocks(text).strip()
             if not text or text == '""':
                 break
-            if not allowed(speaker_id, listener_id):
-                queue.complete(request_id, "rejected", "Communication permission changed before delivery.")
+            if not queue.available() or not allowed(speaker_id, listener_id):
+                queue.complete(request_id, "rejected", "Live input or communication permission changed before delivery.")
                 return
             message = BroadcastMessage(
                 current_time=simulation_time, message_type=MessageType.CLASS,
